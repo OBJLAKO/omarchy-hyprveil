@@ -15,7 +15,7 @@ import time
 import unittest
 from unittest import mock
 
-SOURCE = Path(__file__).resolve().parents[1] / "plugin/privacy-watch"
+SOURCE = Path(__file__).resolve().parents[1] / "privacy-watch"
 loader = importlib.machinery.SourceFileLoader("privacy_watch", str(SOURCE))
 spec = importlib.util.spec_from_loader(loader.name, loader)
 watch = importlib.util.module_from_spec(spec)

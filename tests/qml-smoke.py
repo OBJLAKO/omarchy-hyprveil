@@ -14,6 +14,9 @@ import sys
 import tempfile
 
 args = argparse.ArgumentParser()
+args.add_argument("--language", choices=("auto", "en", "ru"), default="auto", help="exercise the bar language override")
+args.add_argument("--locale", choices=("en", "ru"), default="en", help="exercise the interface in an isolated Qt locale")
+args.add_argument("--missing-core", action="store_true", help="verify setup guidance without an installed controller")
 args.add_argument("--lab", type=Path, help="use stock KeyboardPanel in a marked isolated Hyprland lab")
 args.add_argument("--customize", action="store_true", help="exercise customization, preserved draft and steady background polling")
 args.add_argument("--native-config", action="store_true", help="exercise authoritative native values and queued Lua reload")
@@ -97,13 +100,16 @@ else:
     sys.exit(1)
 '''.replace("EXPECT_FAILURE", "True" if options.status_failure else "False").replace("CONFIGURE_FAILURE", "True" if options.configure_failure else "False"))
     controller.chmod(0o700)
+    if options.missing_core:
+        controller.unlink()
+    (plugin / "artifacts").mkdir(exist_ok=True)
     qml = '''
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import "./plugin" as Plugin
 ShellRoot {
-    Plugin.BarWidget { id: widget }
+    Plugin.BarWidget { id: widget; settings: ({language: "LANGUAGE_OVERRIDE"}) }
     Window {
         id: window
         width: 510
@@ -111,8 +117,22 @@ ShellRoot {
         visible: true
         color: "#101315"
         Rectangle { anchors.fill: parent; color: "#101315" }
-        Plugin.Panel { id: panel; x: 20; y: 20; manageIpc: false; hostWidget: widget }
+        Plugin.Panel { id: panel; x: 20; y: 20; manageIpc: false; hostWidget: widget; language: widget.language }
     }
+    property string expectedLanguage: "TEST_LOCALE"
+    function hasText(item, expected) {
+        if (typeof item.text === "string" && item.text === expected && item.visible) return true
+        for (var i=0;i<item.children.length;i++) if (hasText(item.children[i], expected)) return true
+        return false
+    }
+    function visualSnapshot(item) {
+        if (!item.visible) return null
+        var data = {width:item.width,height:item.height,enabled:item.enabled,opacity:item.opacity,children:[]}
+        if (typeof item.text === "string") data.text=item.text
+        for (var i=0;i<item.children.length;i++) { var c=visualSnapshot(item.children[i]); if(c) data.children.push(c) }
+        return data
+    }
+    property string unknownVisual: ""
     property int stage: 0
     property int ticks: 0
     property int closedAt: 0
@@ -127,9 +147,18 @@ ShellRoot {
             if (widget.opened) throw new Error("unexpected open panel")
             if (stage === 0 && ticks >= 4) {
                 if (panel.querying || panel.acting) throw new Error("closed panel executed a command")
+                if (panel.language !== expectedLanguage || widget.language !== expectedLanguage) throw new Error("system locale ignored")
                 panel.open()
                 stage = 1
+            } else if (stage === 1 && MISSING_CORE) {
+                if (panel.current.known || panel.acting || !hasText(panel, panel.tr("prerequisite")) || !hasText(panel, panel.tr("setup_guide"))) throw new Error("missing core has no honest setup guidance")
+                panel.act("start"); panel.act("spoiler"); panel.applyAppearance()
+                if (panel.acting) throw new Error("missing core granted an action")
+                panel.close()
+                console.log("HYPRVEIL_QML_SMOKE_OK")
+                Qt.quit()
             } else if (stage === 1 && !panel.busy && !panel.querying && panel.current.known) {
+                if (!hasText(panel, panel.tr("privacy")) || !hasText(panel, panel.tr("spoiler")) || !hasText(panel, panel.tr("omit"))) throw new Error("localized controls missing")
                 if (panel.current.mode !== "black") throw new Error("initial status not verified")
                 if (CONFIGURE_FAILURE) {
                     panel.setTab("customize")
@@ -151,7 +180,7 @@ ShellRoot {
             } else if (stage === 2 && !panel.busy && !panel.querying) {
                 if (EXPECT_FAILURE) {
                     if (panel.current.known) throw new Error("unattested result accepted")
-                    if (panel.message.indexOf("Не удалось подтвердить") < 0) throw new Error("malformed status shown as success")
+                    if (panel.message !== panel.tr("status_unconfirmed")) throw new Error("malformed status shown as success")
                     panel.act("omit")
                     if (panel.busy) throw new Error("unattested status allowed an action")
                 } else if (!panel.current.known || panel.current.mode !== "spoiler") throw new Error("action not verified by a fresh status")
@@ -165,7 +194,7 @@ ShellRoot {
                     panel.cursor = 3
                     panel.activateCursor()
                     stage = 4
-                } else stage = 5
+                } else { unknownVisual=JSON.stringify(visualSnapshot(panel)); closedAt=ticks; stage=40 }
             } else if (stage === 4 && !panel.busy && !panel.querying) {
                 if (!panel.current.known || panel.current.mode !== "omit") throw new Error("original hide reset did not enter omit")
                 stage = 5
@@ -186,10 +215,13 @@ ShellRoot {
                 if (panel.busy) throw new Error("closed panel polled")
                 console.log("HYPRVEIL_QML_SMOKE_OK")
                 Qt.quit()
+            } else if (stage === 40) {
+                if (panel.current.known || panel.acting || JSON.stringify(visualSnapshot(panel)) !== unknownVisual) throw new Error("unknown state background poll flickered")
+                if (ticks-closedAt>=61 && !panel.querying) { console.log("HYPRVEIL_UNKNOWN_STEADY_OK"); panel.close(); closedAt=ticks; stage=6 }
             } else if (stage === 30 && !panel.busy && !panel.querying) {
                 if (!panel.current.known || panel.current.mode !== "black" || panel.current.appearance.color !== "#ffffff" ||
                     !panel.appearanceDirty || panel.appearanceDraft.color !== "#aabbcd" ||
-                    panel.message.indexOf("Не удалось применить оформление") < 0 || panel.message.indexOf("/secret/") >= 0)
+                    panel.message !== panel.tr("appearance_failed") || panel.message.indexOf("/secret/") >= 0)
                     throw new Error("refused Lua persistence shown as applied or leaked diagnostics")
                 panel.close()
                 closedAt = ticks
@@ -225,7 +257,7 @@ ShellRoot {
             } else if (stage === 20 && !panel.busy && !panel.querying) {
                 if (!panel.current.known || panel.current.mode !== "spoiler" || panel.current.desiredMode !== "omit" ||
                     panel.current.appearance.color !== "#e3d9ff" || !panel.appearanceDirty || panel.appearanceDraft.grain !== 73 ||
-                    panel.appearanceDraft.speed !== 0 || panel.message.indexOf("Lua перечитана") < 0)
+                    panel.appearanceDraft.speed !== 0 || panel.message !== panel.tr("lua_reloaded_dirty"))
                     throw new Error("Lua reload lost draft or used stale saved settings")
                 panel.appearanceDraft = panel.current.appearance
                 panel.appearanceDirty = false
@@ -235,7 +267,7 @@ ShellRoot {
             } else if (stage === 21 && !panel.busy && !panel.querying) {
                 if (!panel.current.known || panel.current.mode !== "black" || panel.current.desiredMode !== "omit" ||
                     panel.current.appearance.color !== "#adcfc8" || panel.appearanceDirty || panel.appearanceDraft.color !== "#adcfc8" ||
-                    panel.appearanceDraft.grain !== 52 || panel.message.indexOf("Текущие настройки показаны") < 0)
+                    panel.appearanceDraft.grain !== 52 || panel.message !== panel.tr("lua_reloaded"))
                     throw new Error("clean draft did not follow confirmed native Lua settings")
                 panel.editAppearance("variant", "telegram")
                 panel.applyAppearance()
@@ -288,7 +320,7 @@ ShellRoot {
         }
     }
 }
-'''.replace("CUSTOM_PREVIEW_PATH", str(plugin / "preview-customization.png")).replace("PREVIEW_PATH", str(plugin / "preview.png")).replace("CUSTOMIZE", "true" if options.customize else "false").replace("NATIVE_CONFIG", "true" if options.native_config else "false").replace("USE_LAB", "true" if options.lab else "false").replace("EXPECT_FAILURE", "true" if options.status_failure else "false").replace("CONFIGURE_FAILURE", "true" if options.configure_failure else "false")
+'''.replace("TEST_LOCALE", options.locale if options.language == "auto" else options.language).replace("LANGUAGE_OVERRIDE", options.language).replace("MISSING_CORE", "true" if options.missing_core else "false").replace("CUSTOM_PREVIEW_PATH", str(plugin / "artifacts" / ("preview-customization-" + options.locale + ".png"))).replace("PREVIEW_PATH", str(plugin / "artifacts" / ("preview-" + options.locale + ".png"))).replace("CUSTOMIZE", "true" if options.customize else "false").replace("NATIVE_CONFIG", "true" if options.native_config else "false").replace("USE_LAB", "true" if options.lab else "false").replace("EXPECT_FAILURE", "true" if options.status_failure else "false").replace("CONFIGURE_FAILURE", "true" if options.configure_failure else "false")
     if options.lab:
         start = qml.index("    Window {")
         end = qml.index("    property int stage:", start)
@@ -312,7 +344,7 @@ ShellRoot {
             function releasePopout(key) { if (activePopout === key) activePopout = null }
         }
         Item { id: anchor; width: 30; height: 34 }
-        Plugin.Panel { id: panel; bar: barModel; anchorItem: anchor; manageIpc: false; hostWidget: widget }
+        Plugin.Panel { id: panel; bar: barModel; anchorItem: anchor; manageIpc: false; hostWidget: widget; language: widget.language }
     }
 ''' + qml[end:]
     (fixture / "shell.qml").write_text(qml)
@@ -329,6 +361,7 @@ ShellRoot {
         environment = lab_env(lab_runtime, metadata)
         environment.update(QT_QPA_PLATFORM="wayland", QT_QPA_PLATFORMTHEME="", QT_STYLE_OVERRIDE="Fusion",
                            HOME=str(home), PYTHONPATH="/fixture-injection", BASH_ENV="/fixture-injection")
+    environment.update(LANG="ru_RU.UTF-8" if options.locale == "ru" else "en_US.UTF-8", LC_ALL="ru_RU.UTF-8" if options.locale == "ru" else "en_US.UTF-8")
     output = subprocess.run(["/usr/bin/quickshell", "--no-color", "--path", str(fixture)],
                             env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, timeout=20)
@@ -338,6 +371,10 @@ ShellRoot {
     forbidden = ("failed to load", "TypeError", "ReferenceError", "Cannot assign", "Unable to assign", "is not a type", "Unexpected token")
     if any(problem.lower() in output.stdout.lower() for problem in forbidden):
         raise SystemExit("QML reported an error")
+    if options.missing_core:
+        assert not (home / "commands.jsonl").exists(), "missing-core fixture unexpectedly ran a controller"
+        print("passed missing-core guidance, locale and no-auto-install/load checks")
+        raise SystemExit(0)
     log = [json.loads(line) for line in (home / "commands.jsonl").read_text().splitlines()]
     expected = ["status", "spoiler", "status"]
     if not options.status_failure:
@@ -350,7 +387,7 @@ ShellRoot {
     actions = [record["action"] for record in log]
     if options.configure_failure:
         expected = ["status", "configure", "status"]
-    if (not options.customize and actions != expected) or (options.customize and (actions[:len(expected)] != expected or any(action != "status" for action in actions[len(expected):]))):
+    if (not options.customize and (actions[:len(expected)] != expected or any(action != "status" for action in actions[len(expected):]))) or (options.customize and (actions[:len(expected)] != expected or any(action != "status" for action in actions[len(expected):]))):
         raise SystemExit("unexpected controller commands: " + repr(log))
     if not all(record["clean"] for record in log):
         raise SystemExit("unsafe inherited environment")

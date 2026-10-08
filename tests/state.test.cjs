@@ -5,8 +5,10 @@ const vm = require('node:vm');
 const {spawnSync} = require('node:child_process');
 const appearance = vm.createContext({});
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'Appearance.js'), 'utf8'), appearance);
-const model = vm.createContext({Appearance: appearance});
-vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'State.js'), 'utf8').replace(/^\.import[^\n]*\n/, ''), model);
+const i18n = vm.createContext({});
+vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "I18n.js"), "utf8").replace(/^\.pragma[^\n]*\n/, ""), i18n);
+const model = vm.createContext({Appearance: appearance, I18n: i18n});
+vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'State.js'), 'utf8').replace(/^\.import[^\n]*\n/gm, ''), model);
 const parse = value => JSON.parse(JSON.stringify(model.parse(typeof value === 'string' ? value : JSON.stringify(value))));
 const defaults = () => JSON.parse(JSON.stringify(appearance.defaults()));
 const sample = mode => ({enabled: true, loaded: true, desired_mode: mode, appearance: defaults(),
@@ -31,7 +33,7 @@ test('spoiler allocation failure honestly reports safe black fallback', () => {
     const state = parse(raw);
     assert.equal(state.known, true);
     assert.equal(state.spoilerFallback, true);
-    assert.equal(model.label(state.mode, state.spoilerFallback), 'Спойлер недоступен: используется чёрная маска');
+    assert.equal(model.label(state.mode, state.spoilerFallback), 'Spoiler unavailable: using a black mask');
     raw.status.spoiler_status = 'unknown';
     assert.equal(parse(raw).known, false);
 });
@@ -204,3 +206,39 @@ test('controller and native appearance must match before UI reports healthy stat
     assert.equal(parse(raw).known, true);
 });
 console.log(`passed ${count} state, appearance and privacy tests`);
+test('English is the fallback and Russian locales select complete presentation text', () => {
+    for (const locale of ['ru', 'ru_RU', 'ru-RU', 'RU_RU.UTF-8', ' ru_BY ']) assert.equal(i18n.language(locale), 'ru');
+    for (const locale of [undefined, null, {}, 42, '', 'C', 'en_US', 'de_DE', 'rust', '__proto__', 'ru<script>']) assert.equal(i18n.language(locale), 'en');
+    for (const [key, translations] of Object.entries(i18n.strings)) {
+        assert.equal(translations.length, 2);
+        for (const value of translations) assert.equal(typeof value === 'string' && value.length > 0, true, key);
+        assert.equal(i18n.text(key, 'en_US'), translations[0]);
+        assert.equal(i18n.text(key, 'ru_RU'), translations[1]);
+        assert.equal(i18n.text(key, 'unknown'), translations[0]);
+    }
+    for (const key of ['__proto__', 'constructor', 'not_a_key', null, {}]) assert.equal(i18n.text(key, 'ru'), '');
+    for (const setting of [undefined, null, {}, [], '', 'auto', 'RU', 'unknown', '__proto__']) {
+        assert.equal(i18n.selectLanguage(setting, 'ru_RU'), 'ru');
+        assert.equal(i18n.selectLanguage(setting, 'en_US'), 'en');
+    }
+    assert.equal(i18n.selectLanguage('en', 'ru_RU'), 'en');
+    assert.equal(i18n.selectLanguage('ru', 'en_US'), 'ru');
+    assert.equal(model.label('spoiler', true, 'ru_RU'), 'Спойлер недоступен: используется чёрная маска');
+    assert.equal(model.label('__proto__', false), 'State unconfirmed');
+});
+test('localization is complete and leaves native parsing and command data untouched', () => {
+    for (const file of ['Panel.qml', 'BarWidget.qml', 'WindowPrivacy.qml', 'AppearanceEditor.qml']) {
+        const qml = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+        assert.equal(/[А-Яа-яЁё]/u.test(qml), false, file);
+        for (const match of qml.matchAll(/\.tr\("([a-z_]+)"\)/g)) assert.equal(Object.hasOwn(i18n.strings, match[1]), true, match[1]);
+    }
+    const raw = sample('spoiler'), before = JSON.stringify(raw), parsed = parse(raw);
+    for (const locale of ['en', 'ru']) {
+        model.label(parsed.mode, parsed.spoilerFallback, locale);
+        i18n.text('prerequisite', locale);
+        assert.equal(JSON.stringify(raw), before);
+        assert.equal(JSON.stringify(parse(raw)), JSON.stringify(parsed));
+        assert.equal(model.allowed('spoiler', parsed), true);
+    }
+});
+console.log('passed 2 locale completeness and presentation-only tests');

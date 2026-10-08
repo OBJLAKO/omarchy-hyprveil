@@ -5,16 +5,77 @@ Requires installed Omarchy/Quickshell and Pillow. All windows use Qt offscreen;
 the fixture has no desktop environment, native controller or personal pixels.
 """
 import json
+import hashlib
 from pathlib import Path
 import subprocess
 import tempfile
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "assets"
 APPEARANCE = {"variant": "telegram", "color": "#cbdcec", "grain": 65,
               "speed": 100, "darkness": 50, "eye": True, "eye_size": 80}
+NATIVE_POSTER_SHA256 = "90d26f63344fcc0e2b5da3135fd49e35e3b9678dc00f20f0b382de5f52f46b2a"
+
+
+def marketplace_cover():
+    """Compose actual materials; never draw window contents or spoiler pixels."""
+    poster = ASSETS / "native-demo.png"
+    if hashlib.sha256(poster.read_bytes()).hexdigest() != NATIVE_POSTER_SHA256:
+        raise RuntimeError("native sample differs from its reviewed synthetic capture")
+    native = json.loads((ASSETS / "native-capture-provenance.json").read_text())
+    if (native.get("source") != "real Hyprland GPU captures in a fresh marked isolated compositor"
+            or not native.get("lab_stopped")
+            or not native.get("marker_absent_from_every_protected_frame")
+            or native["outputs"]["demo/poster.png"]["sha256"] != NATIVE_POSTER_SHA256):
+        raise RuntimeError("native sample lacks stopped, synthetic capture provenance")
+    cover = Image.new("RGB", (1600, 900), "#0e1619")
+    draw = ImageDraw.Draw(cover)
+    font_path = "/usr/share/fonts/Adwaita/AdwaitaSans-Regular.ttf"
+
+    def label(x, y, value, size, fill="#dce5e6"):
+        font = ImageFont.truetype(font_path, size)
+        draw.text((x, y), value, font=font, fill=fill)
+
+    draw.line((1046, 52, 1046, 840), fill="#2a3a40", width=1)
+    label(58, 38, "HYPRVEIL  /  OMARCHY", 19, "#9bb7c1")
+    label(54, 83, "Capture privacy", 73, "#edf2ed")
+    label(54, 164, "from your bar.", 73, "#edf2ed")
+    label(59, 258, "Keep your window visible. Choose what its capture reveals.", 24, "#a7bbb9")
+    label(59, 306, "ONE CLICK    ·    THREE STYLES    ·    LIVE APPEARANCE", 16, "#89aa9c")
+    with Image.open(poster) as sample:
+        cover.paste(sample.convert("RGB"), (58, 350))
+    label(59, 841, "Hyprveil native capture · synthetic notes", 16, "#91a9a3")
+    label(1089, 30, "REAL OMARCHY PANEL", 15, "#9bb7c1")
+    draw.rounded_rectangle((1077, 59, 1557, 836), radius=18, fill="#101315", outline="#32444c", width=1)
+    with Image.open(ASSETS / "appearance-panel.png") as panel:
+        panel = panel.convert("RGB").resize((456, 751), Image.Resampling.LANCZOS)
+        cover.paste(panel, (1089, 72))
+    label(1089, 848, "Offscreen QML · English / Russian", 15, "#8ba5ae")
+    cover.save(ROOT / "preview.png", optimize=True)
+
+
+def write_provenance():
+    names = ["preview.png", "assets/hiding-panel.png", "assets/appearance-panel.png",
+             "assets/social-preview.png", "assets/spoiler-preview.gif", "assets/native-demo.png"]
+    native = json.loads((ASSETS / "native-capture-provenance.json").read_text())
+    data = {
+        "version": 1,
+        "ui": {"source": "real repository QML components rendered with Qt offscreen",
+               "locale": "English (C.UTF-8)", "controller": "status-only synthetic fixture",
+               "theme": "explicit synthetic palette in temporary HOME",
+               "personal_desktop_capture": False, "native_rendering": False},
+        "native_sample": {"source": "Hyprveil native capture of synthetic GTK notes in a marked isolated compositor",
+                          "native_sha256": native["native_sha256"], "lab_stopped": True,
+                          "upstream_repository": "https://github.com/OBJLAKO/hyprveil",
+                          "upstream_asset": "assets/demo/poster.png",
+                          "sha256": NATIVE_POSTER_SHA256},
+        "composition": "crop-free scaling, labels and framing; no synthesized native window or mask pixels",
+        "outputs": {name: {"sha256": hashlib.sha256((ROOT / name).read_bytes()).hexdigest(),
+                           "bytes": (ROOT / name).stat().st_size} for name in names},
+    }
+    (ASSETS / "provenance.json").write_text(json.dumps(data, indent=2) + "\n")
 
 with tempfile.TemporaryDirectory(prefix="hyprveil-public-preview-") as temporary:
     fixture = Path(temporary)
@@ -76,11 +137,13 @@ Item {
     function fittedContentHeight(value) { return value }
 }
 ''')
-    (fixture / "plugin").symlink_to(ROOT / "plugin")
+    # A local import alias only; the public plugin's runtime lives at repo root.
+    (fixture / "plugin").symlink_to(ROOT)
     controller = commands / "hyprveil"
     status = {"enabled": True, "loaded": True, "desired_mode": "spoiler", "appearance": APPEARANCE,
               "status": {"mode": "spoiler", "session": "live", "local_dump": "disabled-in-live",
-                         "spoiler_status": "ready", "appearance": APPEARANCE}}
+                         "spoiler_status": "ready", "appearance": APPEARANCE,
+                         "config_api": 1, "image_path": ""}}
     controller.write_text("#!/usr/bin/python3\nimport json,sys\nassert sys.argv[1:] == ['status']\nprint(" + repr(json.dumps(status)) + ")\n")
     controller.chmod(0o700)
     frames = fixture / "frames"
@@ -149,6 +212,7 @@ ShellRoot {
         onTriggered: {
             if (!hiding.opened) { hiding.open(); appearance.open(); return }
             if (!hiding.current.known || !appearance.current.known || hiding.querying || appearance.querying) return
+            if (hiding.language!=="en" || appearance.language!=="en") throw new Error("preview must be English")
             if (String(Color.background)!=="#101315" || String(Color.foreground)!=="#dce4e8" || String(Color.accent)!=="#9eb7c6") return
             if (root.frame===0) appearance.setTab("customize")
             root.readyTicks++
@@ -194,6 +258,15 @@ ShellRoot {
         with Image.open(ASSETS / name) as image:
             assert image.mode in ("RGB", "RGBA")
             assert image.mode == "RGB" or image.getchannel("A").getextrema() == (255, 255)
+            # Strip all ancillary metadata; only the synthetic rendered pixels ship.
+            opaque = image.convert("RGB")
+        opaque.save(ASSETS / name, optimize=True)
     assert Image.open(ASSETS / "social-preview.png").size == (1280, 640)
     assert (ASSETS / "social-preview.png").stat().st_size < 1024 * 1024
-    print("Rendered real QML panels, synthetic preview animation and 1280×640 social card.")
+
+# The QML process and its isolated fixture have both stopped before publishing
+# the final composition and its hashes.
+marketplace_cover()
+write_provenance()
+assert (ROOT / "preview.png").is_file()
+print("Rendered English QML panels, synthetic animation, 1280×640 social card and 1600×900 marketplace preview.")

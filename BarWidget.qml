@@ -7,10 +7,13 @@ import qs.Ui as Ui
 import "." as Hyprveil
 import "State.js" as State
 import "Privacy.js" as Privacy
+import "I18n.js" as I18n
 
 Ui.BarWidget {
     id: root
-    moduleName: "sky.hyprveil"
+    readonly property string language: I18n.selectLanguage(setting("language", "auto"), Qt.locale().name)
+    function tr(key) { return I18n.text(key, language) }
+    moduleName: "io.github.objlako.hyprveil"
     readonly property bool opened: panel.opened
     readonly property bool popoutSwitchClosing: panel.popoutSwitchClosing
     readonly property real openPanelIndicatorWidth: Style.space(19)
@@ -50,7 +53,7 @@ Ui.BarWidget {
         if (privacyQueued && next.state !== "unknown" && (next.address !== privacyQueuedTarget.address || next.stable_id !== privacyQueuedTarget.stable_id || next.state !== privacyQueuedTarget.state)) {
             privacyQueued = false
             privacyQueuedTarget = Privacy.unknown()
-            panel.message = "Выбранное окно изменилось. Повторите переключение."
+            panel.message = root.tr("target_changed")
         }
         if (privacyBusy && next.address === privacyTarget.address && next.stable_id === privacyTarget.stable_id && next.state !== privacyTarget.state &&
             (next.state === "hidden" || next.state === "visible")) {
@@ -59,7 +62,7 @@ Ui.BarWidget {
         } else if (privacyBusy && next.state !== "unknown" && (next.address !== privacyTarget.address || next.stable_id !== privacyTarget.stable_id)) {
             privacyTimeout.stop()
             privacyBusy = false
-            panel.message = "Выбрано другое окно. Его состояние показано."
+            panel.message = root.tr("focus_changed")
         }
     }
     Connections {
@@ -69,7 +72,7 @@ Ui.BarWidget {
                 root.privacyQueued = false
                 if (root.focusPrivacy.address === root.privacyQueuedTarget.address && root.focusPrivacy.stable_id === root.privacyQueuedTarget.stable_id && root.focusPrivacy.state === root.privacyQueuedTarget.state)
                     root.togglePrivacy()
-                else panel.message = "Выбранное окно изменилось. Повторите переключение."
+                else panel.message = root.tr("target_changed")
                 root.privacyQueuedTarget = Privacy.unknown()
             }
         }
@@ -106,7 +109,7 @@ Ui.BarWidget {
             privacyTimeout.stop()
             if (code !== 0 || !root.privacyReplyGood) {
                 root.privacyBusy = false
-                panel.message = "Не удалось отправить переключение приватности окна."
+                panel.message = root.tr("privacy_dispatch_failed")
                 panel.refresh(false)
             } else if (root.privacyConfirmed) root.privacyBusy = false
             else if (root.privacyBusy) privacyTimeout.restart()
@@ -118,11 +121,12 @@ Ui.BarWidget {
         onTriggered: {
             privacyProcess.running = false
             root.privacyBusy = false
-            panel.message = "Переключение окна не подтверждено. Проверьте состояние и повторите."
+            panel.message = root.tr("privacy_unconfirmed")
         }
     }
 
     Hyprveil.Panel {
+        language: root.language
         id: panel
         bar: root.bar
         settings: root.settings
@@ -137,12 +141,12 @@ Ui.BarWidget {
         hasVisualContent: true
         fixedWidth: root.vertical ? root.barSize : Style.space(30)
         dimmed: root.privacyBusy
-        tooltipText: "Hyprveil · " + (root.focusPrivacy.state === "hidden" ? "окно скрыто от захвата"
-                : root.focusPrivacy.state === "visible" ? "окно видно в захвате" : root.focusPrivacy.state === "none" ? "окно не выбрано" : "статус окна недоступен")
-            + (root.focusPrivacy.inherited ? "\nОкно наследует защиту; переключение отключено" : "")
-            + (panel.current.known ? "\nПоследняя проверка: " + State.label(panel.current.mode, panel.current.spoilerFallback) : "")
-            + "\nЛКМ или средняя кнопка — показать/скрыть окно"
-            + "\nПКМ — стили и оформление"
+        tooltipText: "Hyprveil · " + (root.focusPrivacy.state === "hidden" ? root.tr("tooltip_hidden")
+                : root.focusPrivacy.state === "visible" ? root.tr("tooltip_visible") : root.focusPrivacy.state === "none" ? root.tr("tooltip_none") : root.tr("tooltip_unknown"))
+            + (root.focusPrivacy.inherited ? root.tr("tooltip_inherited") : "")
+            + (panel.current.known ? root.tr("last_check") + State.label(panel.current.mode, panel.current.spoilerFallback, root.language) : "")
+            + root.tr("left_hint")
+            + root.tr("right_hint")
         onPressed: function(mouseButton) {
             if (mouseButton === Qt.RightButton) root.toggle()
             else if (mouseButton === Qt.LeftButton || mouseButton === Qt.MiddleButton) root.togglePrivacy()

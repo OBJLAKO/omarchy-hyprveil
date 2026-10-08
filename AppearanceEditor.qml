@@ -3,9 +3,12 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 import "Appearance.js" as Appearance
+import "I18n.js" as I18n
 
 Column {
     id: root
+    property string language: I18n.language(Qt.locale().name)
+    function tr(key) { return I18n.text(key, language) }
     property var draft: Appearance.defaults()
     property bool dirty: false
     property bool busy: false
@@ -65,7 +68,7 @@ Column {
         width: parent.width; spacing: Style.space(8)
         Button {
             width: (parent.width - parent.spacing) / 2
-            text: "Сатин"; selected: root.draft.variant === "satin"; bordered: true; focusable: true
+            text: root.tr("satin"); selected: root.draft.variant === "satin"; bordered: true; focusable: true
             enabled: !root.busy && root.colorValid; fontFamily: root.fontFamily; fontSize: Style.space(12)
             onClicked: root.variantPicked("satin")
         }
@@ -109,12 +112,12 @@ Column {
             onEditingFinished: if (acceptableInput) root.edited("color", text.toLowerCase())
         }
     }
-    Adjustment { caption: "Зернистость"; value: root.draft.grain; onEdited: function(next) { root.edited("grain", next) } }
-    Adjustment { caption: "Скорость"; value: root.draft.speed; maximum: 200; onEdited: function(next) { root.edited("speed", next) } }
-    Adjustment { caption: "Затемнение"; value: root.draft.darkness; onEdited: function(next) { root.edited("darkness", next) } }
+    Adjustment { caption: root.tr("grain"); value: root.draft.grain; onEdited: function(next) { root.edited("grain", next) } }
+    Adjustment { caption: root.tr("speed"); value: root.draft.speed; maximum: 200; onEdited: function(next) { root.edited("speed", next) } }
+    Adjustment { caption: root.tr("darkness"); value: root.draft.darkness; onEdited: function(next) { root.edited("darkness", next) } }
     Row {
         width: parent.width
-        Text { width: parent.width - eyeToggle.implicitWidth; anchors.verticalCenter: parent.verticalCenter; text: "Перечёркнутый глаз"; textFormat: Text.PlainText; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.space(12) }
+        Text { width: parent.width - eyeToggle.implicitWidth; anchors.verticalCenter: parent.verticalCenter; text: root.tr("crossed_eye"); textFormat: Text.PlainText; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.space(12) }
         ToggleSwitch {
             id: eyeToggle
             checked: root.draft.eye; rounded: true; trackHeight: Style.space(18); busy: root.busy
@@ -123,12 +126,12 @@ Column {
             onToggled: root.edited("eye", !root.draft.eye)
         }
     }
-    Adjustment { caption: "Размер глаза"; value: root.draft.eye_size; minimum: 40; maximum: 128; suffix: " px"; enabled: root.draft.eye; onEdited: function(next) { root.edited("eye_size", next) } }
+    Adjustment { caption: root.tr("eye_size"); value: root.draft.eye_size; minimum: 40; maximum: 128; suffix: " px"; enabled: root.draft.eye; onEdited: function(next) { root.edited("eye_size", next) } }
     Row {
         width: parent.width; spacing: Style.space(8)
         Button {
             width: (parent.width - parent.spacing) * 0.56
-            text: root.busy ? "Применяем…" : root.dirty ? "Применить изменения" : "Применено"
+            text: root.busy ? root.tr("applying") : root.dirty ? root.tr("apply") : root.tr("applied")
             selected: root.dirty; bordered: true; focusable: true
             enabled: root.dirty && root.colorValid && !root.busy
             fontFamily: root.fontFamily; fontSize: Style.space(12)
@@ -136,15 +139,15 @@ Column {
         }
         Button {
             width: (parent.width - parent.spacing) * 0.44
-            text: "Сбросить оформление"; focusable: true; enabled: !root.busy
+            text: root.tr("reset_appearance"); focusable: true; enabled: !root.busy
             fontFamily: root.fontFamily; fontSize: Style.space(11)
             onClicked: root.resetRequested()
         }
     }
     Text {
         width: parent.width
-        text: root.mode === "spoiler" ? "Настройки меняют только спойлер. Выбранный способ скрытия сохраняется."
-            : "Оформление появится при выборе «Спойлер». Текущий способ скрытия сохранится."
+        text: root.mode === "spoiler" ? root.tr("spoiler_only")
+            : root.tr("spoiler_later")
         textFormat: Text.PlainText; color: Color.muted; font.family: root.fontFamily; font.pixelSize: Style.space(11); wrapMode: Text.WordWrap
     }
 }

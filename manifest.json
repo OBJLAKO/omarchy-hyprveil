@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.objlako.hyprveil",
+  "name": "Hyprveil",
+  "version": "1.5.0",
+  "author": "OBJLAKO",
+  "description": "Window capture privacy and spoiler styles, directly from the Omarchy bar.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Hyprveil",
+    "description": "Left or middle click: window privacy. Right click: styles and appearance.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

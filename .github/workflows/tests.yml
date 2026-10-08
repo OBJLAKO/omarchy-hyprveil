@@ -16,7 +16,7 @@ jobs:
           persist-credentials: false
       - name: Install Lua test interpreter
         run: sudo apt-get update && sudo apt-get install -y lua5.4
-      - name: Python installer, watcher, and lab-admission tests
+      - name: Python root-package, installer, watcher, and lab-admission tests
         run: python3 -m unittest discover -s tests -v
       - name: JavaScript state and executable Lua tests
-        run: node plugin/tests/state.test.cjs
+        run: node tests/state.test.cjs

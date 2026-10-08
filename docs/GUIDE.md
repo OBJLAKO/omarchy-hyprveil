@@ -2,44 +2,94 @@
 
 This Omarchy widget controls [native Hyprveil](https://github.com/OBJLAKO/hyprveil)
 through its installed CLI and public Lua API. It requires the 0.4.0 native
-API; the core's tested Hyprland version is 0.56.2. The widget does not build
-or install native code. Its stable Omarchy plugin ID is `sky.hyprveil`.
+API; the core's tested Hyprland version is 0.56.2. The permanent Omarchy
+plugin ID is `io.github.objlako.hyprveil`.
 
 ## Installation
 
-Install native Hyprveil first. From the root of
-[omarchy-hyprveil](https://github.com/OBJLAKO/omarchy-hyprveil):
+Follow the [native core installation](https://github.com/OBJLAKO/hyprveil#quick-start)
+first and complete its first login to activate the installed core. The panel
+requires `~/.local/bin/hyprveil`; it cannot install native code for you.
+Then use Omarchy's standard plugin manager:
 
 ```sh
-python3 tools/install.py
+omarchy plugin add https://github.com/OBJLAKO/omarchy-hyprveil.git --enable
 ```
 
-The installer resolves only `~/.local/bin/hyprveil`: an owned executable or
-the native installer's exact symlink to
-`~/.local/share/hyprveil/controller.py`. It does not search PATH or run the
-controller during installation. It creates the user plugin directory when
-needed and installs the widget into
-`~/.config/omarchy/plugins/sky.hyprveil`.
+The repository has one root manifest, root QML entry point, README and MIT
+license. Omarchy clones and validates the root package directly. No postinstall
+script is needed or executed. The UI gives setup guidance when native state
+cannot be confirmed. It performs no automatic native installation or loading.
+With an installed but unloaded core, the Load button is an explicit user action.
 
-Existing files and `~/.config/omarchy/shell.json` get private backup copies
-under `artifacts/shell-install-*` in the checkout. The printed report lists
-paths and hashes. Updates that replace changed files require:
+Update a Git-managed installation through Omarchy:
+
+```sh
+omarchy plugin update io.github.objlako.hyprveil
+```
+
+### Migrate the old widget
+
+If you have the earlier `sky.hyprveil` widget, disable it before adding the
+new ID so that only one eye appears:
+
+```sh
+omarchy plugin disable sky.hyprveil
+omarchy plugin add https://github.com/OBJLAKO/omarchy-hyprveil.git --enable
+```
+
+If the older `sky.screen-privacy` bar entry is also enabled, disable that
+entry as well. Keep the old directories: existing helper files and keyboard
+bindings can remain in use. Standard plugin add does not take over old IDs.
+
+### Optional offline or manual installer
+
+From a checked-out repository, `python3 tools/install.py` is an optional
+alternative for a fresh manual installation. For a legacy custom installation,
+use the explicit migration:
 
 ```sh
 python3 tools/install.py --update
 ```
 
-The installer adds one widget entry, preserves unrelated layout and
-keybindings, and removes the superseded legacy eye entry if present.
-Existing helper files are retained. It refuses links, FIFOs, unsafe file
-ownership/permissions and detected concurrent changes. A concurrent layout
-edit is left untouched; widget files may already have been installed.
+The installer resolves only the owned `~/.local/bin/hyprveil` executable or
+the native installer's exact symlink to
+`~/.local/share/hyprveil/controller.py`. It never searches PATH or executes
+the controller during installation. It installs root runtime files into
+`~/.config/omarchy/plugins/io.github.objlako.hyprveil`.
 
-Omarchy hot-reloads these user files. Neither Hyprland nor native Hyprveil
-is restarted by this installer. To restore a layout manually, use the
-reported `shell.json` backup after checking it against any later edits.
-Previous widget files are beside that backup. Retain their original
-permissions; `privacy-watch` must be executable.
+Existing files and `~/.config/omarchy/shell.json` receive private backups
+under `artifacts/shell-install-*` in the checkout. The printed report lists
+paths and hashes. Legacy migration requires `--update` before any replacement;
+it backs up old runtime files, replaces the named legacy bar entries in place,
+preserves unrelated widgets/settings/keybindings and keeps old directories
+and helper files. New duplicate owned eye entries are collapsed.
+
+A manual installation is **not Git-managed** and cannot use `omarchy plugin
+update`; repeat the manual installer for future updates. Conversely, the
+manual installer refuses an existing Git-managed target, preserving that
+checkout and directing you to the standard update command.
+
+Links, FIFOs, unsafe ownership/permissions and detected concurrent changes
+are refused. A concurrent layout edit remains untouched even if widget files
+have already been installed. Neither Hyprland nor native Hyprveil is restarted.
+To restore manually, review the reported layout backup against later edits;
+previous widget files are beside it. The optional installer gives
+`privacy-watch` mode 755; the widget invokes it with fixed `/usr/bin/python3`.
+
+## Language
+
+English is the fallback interface language. A Russian system locale selects
+Russian. Override the widget language through Omarchy's existing settings API:
+
+```sh
+omarchy bar set io.github.objlako.hyprveil language ru
+omarchy bar set io.github.objlako.hyprveil language en
+omarchy bar set io.github.objlako.hyprveil language auto
+```
+
+`auto` follows the system locale; unsupported values behave like `auto`.
+Language changes affect display text only, never native values or commands.
 
 ## Controls
 
@@ -61,10 +111,10 @@ Keyboard shortcuts for native Hyprveil are configured separately in Hyprland.
 
 | Panel label | Mode | Meaning |
 | :--- | :--- | :--- |
-| Спойлер | `spoiler` | An opaque procedural mask with satin or Telegram appearance. |
-| Полностью скрыть | `omit` | Exclude the protected window from compositor capture. |
-| Обычная маска | `black` | A plain black mask. |
-| Вернуть исходное скрытие | `omit` | Return to omission while Hyprveil stays loaded. |
+| Spoiler / Спойлер | `spoiler` | An opaque procedural mask with satin or Telegram appearance. |
+| Omit window / Полностью скрыть | `omit` | Exclude the protected window from compositor capture. |
+| Black mask / Обычная маска | `black` | A plain black mask. |
+| Restore omission / Вернуть исходное скрытие | `omit` | Return to omission while Hyprveil stays loaded. |
 
 Style changes preserve which windows are private. Your own desktop keeps
 its normal window contents. The panel can load the installed native plugin
@@ -72,7 +122,7 @@ when it is not loaded; style controls stay disabled until state is confirmed.
 
 ## Appearance and native settings
 
-The Оформление tab exposes seven fields:
+The Appearance / Оформление tab exposes seven fields:
 
 | Field | Range/default |
 | :--- | :--- |
@@ -98,7 +148,7 @@ saved to the managed literal block in
 and is preserved. Custom code inside it or a later override can cause a
 GUI save to be refused; the panel keeps the draft and reports the result.
 
-**Перечитать Lua** explicitly reloads configuration and confirms the native
+**Reload Lua / Перечитать Lua** explicitly reloads configuration and confirms the native
 result. It preserves an unsaved draft; clean fields follow the new state.
 The separate refresh control reads current status without reloading Lua.
 Normal polling runs every 2.5 seconds only while the panel is open. It does
@@ -132,14 +182,19 @@ From the repository root:
 
 ```sh
 python3 -m unittest discover -s tests -v
-node plugin/tests/state.test.cjs
-python3 plugin/tests/qml-smoke.py --native-config
-python3 plugin/tests/qml-smoke.py --status-failure
-python3 plugin/tests/qml-smoke.py --configure-failure
-python3 plugin/tests/preview-colors.py
+node tests/state.test.cjs
+python3 tests/qml-smoke.py --native-config --locale en
+python3 tests/qml-smoke.py --native-config --locale ru
+python3 tests/qml-smoke.py --missing-core --locale en
+python3 tests/qml-smoke.py --status-failure
+python3 tests/qml-smoke.py --configure-failure
+python3 tests/preview-colors.py
 ```
 
 Python tests use temporary HOME directories and synthetic Unix sockets.
+Portable package checks validate the root contract; a local integration test
+runs stock Omarchy add/validate/enable with fake git transport and shell IPC.
+That stock-source test is skipped when Omarchy is not installed.
 Node tests exercise the state model and execute Lua scenarios for identity,
 focus, inherited protection, response validation and idempotence. Local QML
 checks use an artificial controller; color checks require Pillow. The CI
@@ -149,7 +204,7 @@ For a stock KeyboardPanel check, explicitly supply an already-running,
 marked isolated runtime created by the native test harness:
 
 ```sh
-python3 plugin/tests/qml-smoke.py --native-config --lab /tmp/hv-EXPLICIT
+python3 tests/qml-smoke.py --native-config --lab /tmp/hv-EXPLICIT
 ```
 
 The independent read-only admission helper checks the marker, owner, process,

@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "ui": {
+    "source": "real repository QML components rendered with Qt offscreen",
+    "locale": "English (C.UTF-8)",
+    "controller": "status-only synthetic fixture",
+    "theme": "explicit synthetic palette in temporary HOME",
+    "personal_desktop_capture": false,
+    "native_rendering": false
+  },
+  "native_sample": {
+    "source": "Hyprveil native capture of synthetic GTK notes in a marked isolated compositor",
+    "native_sha256": "6b4e8ce6a24f56678c96a118296e530c777dd249123f038bf8844a9d78678641",
+    "lab_stopped": true,
+    "upstream_repository": "https://github.com/OBJLAKO/hyprveil",
+    "upstream_asset": "assets/demo/poster.png",
+    "sha256": "90d26f63344fcc0e2b5da3135fd49e35e3b9678dc00f20f0b382de5f52f46b2a"
+  },
+  "composition": "crop-free scaling, labels and framing; no synthesized native window or mask pixels",
+  "outputs": {
+    "preview.png": {
+      "sha256": "3ef17022a498fe831a5366ccfb50abd67af14f6f815a5fca5d1a48b67db7d059",
+      "bytes": 358050
+    },
+    "assets/hiding-panel.png": {
+      "sha256": "97bebdc89148d7d7a868e4e97727a0c264e8f310f78cffdeb834d8714922a3c3",
+      "bytes": 47609
+    },
+    "assets/appearance-panel.png": {
+      "sha256": "35dfc043a5bb38f76286643dd69355ec114ff269a32f3cc226438fbcfbbc3d71",
+      "bytes": 56017
+    },
+    "assets/social-preview.png": {
+      "sha256": "6f5fa7eacf47ee9708e9be24d4cb631ab2f553002054e6ee0becb38902d51856",
+      "bytes": 89419
+    },
+    "assets/spoiler-preview.gif": {
+      "sha256": "0b73beb9f275ced2baffec1ea7312bce3bd6d6aaf34a39b518b8029dabca2884",
+      "bytes": 877618
+    },
+    "assets/native-demo.png": {
+      "sha256": "90d26f63344fcc0e2b5da3135fd49e35e3b9678dc00f20f0b382de5f52f46b2a",
+      "bytes": 218451
+    }
+  }
+}

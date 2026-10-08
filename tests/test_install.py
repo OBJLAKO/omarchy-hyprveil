@@ -35,7 +35,7 @@ class InstallerTests(unittest.TestCase):
         self.cli.parent.mkdir(parents=True)
         self.cli.write_text("#!/usr/bin/python3\nraise SystemExit('installation must not execute me')\n")
         self.cli.chmod(0o755)
-        self.target = self.plugins / "sky.hyprveil"
+        self.target = self.plugins / "io.github.objlako.hyprveil"
         self.home_patch = patch.object(Path, "home", return_value=self.home)
         self.home_patch.start()
         self.addCleanup(self.home_patch.stop)
@@ -65,13 +65,13 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(report["installed"])
         self.assertEqual(report["controller"], str(self.cli))
         self.assertEqual(written[-1], "manifest.json")
-        self.assertEqual(len(written), 13)
+        self.assertEqual(len(written), 14)
         self.assertEqual(stat.S_IMODE((self.target / "privacy-watch").stat().st_mode), 0o755)
         self.assertEqual(stat.S_IMODE((self.target / "Panel.qml").stat().st_mode), 0o644)
         current = json.loads(self.shell.read_bytes())
         self.assertEqual(current["custom"], "retain")
         self.assertEqual(current["bar"]["layout"]["left"], self.initial["bar"]["layout"]["left"])
-        self.assertEqual([row["id"] for row in current["bar"]["layout"]["right"]], ["sky.hyprveil", "omarchy.clock"])
+        self.assertEqual([row["id"] for row in current["bar"]["layout"]["right"]], ["io.github.objlako.hyprveil", "omarchy.clock"])
         self.assertEqual(Path(report["backup"]).read_bytes(), files.encoded(self.initial))
         self.assertEqual(stat.S_IMODE(Path(report["backup"]).stat().st_mode), 0o600)
 
@@ -79,7 +79,76 @@ class InstallerTests(unittest.TestCase):
         self.run_install()
         self.run_install()
         layout = json.loads(self.shell.read_bytes())["bar"]["layout"]
-        self.assertEqual(sum(row.get("id") == "sky.hyprveil" for rows in layout.values() for row in rows), 1)
+        self.assertEqual(sum(row.get("id") == "io.github.objlako.hyprveil" for rows in layout.values() for row in rows), 1)
+
+    def test_old_flat_install_requires_explicit_migration_and_retains_files(self):
+        legacy = self.plugins / "sky.hyprveil"
+        legacy.mkdir()
+        legacy_files = {"Panel.qml": b"// retained 1.4.0 custom panel\n", "manifest.json": b'{"id":"sky.hyprveil","version":"1.4.0"}\n',
+                        "privacy-watch": b"# retained legacy helper\n"}
+        for name, contents in legacy_files.items():
+            (legacy / name).write_bytes(contents)
+        self.initial["bar"]["layout"]["left"].append({"id": "sky.hyprveil", "settings": {"retain": True}})
+        self.initial["bar"]["layout"]["right"].insert(0, {"id": "sky.screen-privacy"})
+        self.shell.write_bytes(files.encoded(self.initial))
+        before = self.shell.read_bytes()
+        with self.assertRaisesRegex(RuntimeError, "--update"):
+            self.run_install()
+        self.assertFalse(self.target.exists())
+        self.assertEqual(self.shell.read_bytes(), before)
+        report = self.run_install("--update")
+        layout = json.loads(self.shell.read_bytes())["bar"]["layout"]
+        self.assertEqual(layout["left"][-1], {"id": installer.PLUGIN_ID, "settings": {"retain": True}})
+        entries = [item for values in layout.values() for item in values]
+        self.assertEqual(sum(item.get("id") == installer.PLUGIN_ID for item in entries), 1)
+        self.assertFalse(any(item.get("id") in installer.LEGACY_IDS for item in entries))
+        self.assertEqual(Path(report["backup"]).read_bytes(), before)
+        for name, contents in legacy_files.items():
+            self.assertEqual((legacy / name).read_bytes(), contents)
+            backup = Path(report["backup"]).parent / "legacy-sky.hyprveil" / name
+            self.assertEqual(backup.read_bytes(), contents)
+            self.assertEqual(stat.S_IMODE(backup.stat().st_mode), 0o600)
+        self.assertEqual(json.loads((self.target / "manifest.json").read_text())["version"], "1.5.0")
+
+    def test_existing_new_entry_wins_and_duplicate_owned_eyes_are_removed(self):
+        self.initial["bar"]["layout"]["left"].append({"id": "sky.hyprveil"})
+        self.initial["bar"]["layout"]["right"] = [{"id": installer.PLUGIN_ID, "settings": {"keep": 42}},
+            {"id": installer.PLUGIN_ID}, {"id": "sky.screen-privacy"}, {"id": "another.privacy"}]
+        self.shell.write_bytes(files.encoded(self.initial))
+        self.run_install("--update")
+        layout = json.loads(self.shell.read_bytes())["bar"]["layout"]
+        self.assertEqual(layout["right"], [{"id": installer.PLUGIN_ID, "settings": {"keep": 42}}, {"id": "another.privacy"}])
+        self.assertEqual(layout["left"], [{"id": "omarchy.menu"}])
+
+    def test_string_form_legacy_ids_are_migrated_without_touching_unrelated_strings(self):
+        self.initial["bar"]["layout"]["right"] = ["sky.hyprveil", "sky.screen-privacy", "other.privacy"]
+        self.shell.write_bytes(files.encoded(self.initial))
+        with self.assertRaisesRegex(RuntimeError, "--update"):
+            self.run_install()
+        self.run_install("--update")
+        self.assertEqual(json.loads(self.shell.read_bytes())["bar"]["layout"]["right"], [{"id": installer.PLUGIN_ID}, "other.privacy"])
+
+    def test_git_managed_marketplace_install_is_refused_before_file_or_layout_writes(self):
+        self.target.mkdir()
+        (self.target / ".git").mkdir()
+        panel = self.target / "Panel.qml"
+        panel.write_text("// local Git checkout edit\n")
+        before = self.shell.read_bytes()
+        for args in ((), ("--update",)):
+            with self.assertRaisesRegex(RuntimeError, "omarchy plugin update"):
+                self.run_install(*args)
+            self.assertEqual(panel.read_text(), "// local Git checkout edit\n")
+            self.assertEqual(self.shell.read_bytes(), before)
+            self.assertFalse((self.target / "manifest.json").exists())
+
+    def test_unsafe_legacy_file_is_refused_before_new_install(self):
+        legacy = self.plugins / "sky.hyprveil"
+        legacy.mkdir()
+        (legacy / "Panel.qml").symlink_to(self.cli)
+        with self.assertRaises((OSError, files.Refused)):
+            self.run_install("--update")
+        self.assertFalse(self.target.exists())
+        self.assertEqual(self.shell.read_bytes(), files.encoded(self.initial))
 
     def test_first_user_plugin_install_creates_plugins_directory(self):
         self.plugins.rmdir()
@@ -94,16 +163,16 @@ class InstallerTests(unittest.TestCase):
         legacy.mkdir()
         helper = legacy / "privacy-status"
         helper.write_text("legacy helper retained for existing bindings\n")
-        self.run_install()
+        self.run_install("--update")
         layout = json.loads(self.shell.read_bytes())["bar"]["layout"]
-        self.assertEqual([row["id"] for row in layout["right"]], ["sky.hyprveil", "omarchy.clock"])
+        self.assertEqual([row["id"] for row in layout["right"]], ["io.github.objlako.hyprveil", "omarchy.clock"])
         self.assertEqual(helper.read_text(), "legacy helper retained for existing bindings\n")
 
     def test_legacy_eye_is_removed_when_new_widget_already_exists(self):
-        self.initial["bar"]["layout"]["right"] = [{"id": "sky.hyprveil"}, {"id": "sky.screen-privacy"}, {"id": "omarchy.clock"}]
+        self.initial["bar"]["layout"]["right"] = [{"id": "io.github.objlako.hyprveil"}, {"id": "sky.screen-privacy"}, {"id": "omarchy.clock"}]
         self.shell.write_bytes(files.encoded(self.initial))
-        self.run_install()
-        self.assertEqual([row["id"] for row in json.loads(self.shell.read_bytes())["bar"]["layout"]["right"]], ["sky.hyprveil", "omarchy.clock"])
+        self.run_install("--update")
+        self.assertEqual([row["id"] for row in json.loads(self.shell.read_bytes())["bar"]["layout"]["right"]], ["io.github.objlako.hyprveil", "omarchy.clock"])
 
     def test_owned_customization_requires_update_and_is_backed_up(self):
         self.run_install()

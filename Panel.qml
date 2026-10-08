@@ -8,11 +8,14 @@ import qs.Ui as Ui
 import "State.js" as State
 import "Appearance.js" as Appearance
 import "Privacy.js" as Privacy
+import "I18n.js" as I18n
 
 Ui.Panel {
     id: root
-    moduleName: "sky.hyprveil"
-    ipcTarget: "sky.hyprveil"
+    property string language: I18n.language(Qt.locale().name)
+    function tr(key) { return I18n.text(key, language) }
+    moduleName: "io.github.objlako.hyprveil"
+    ipcTarget: "io.github.objlako.hyprveil"
     property Item anchorItem: null
     property var hostWidget: null
     readonly property var barIdentity: hostWidget || root
@@ -25,6 +28,7 @@ Ui.Panel {
     property bool acting: false
     readonly property bool busy: acting || !!(hostWidget && (hostWidget.privacyBusy || hostWidget.privacyDispatching))
     property bool queryManual: false
+    property bool statusChecked: false
     property string queuedAction: ""
     property var queuedAppearance: null
     property string tab: "hide"
@@ -69,12 +73,13 @@ Ui.Panel {
     function finishQuery() {
         if (!querying || !queryFinished || !queryStdoutFinished) return
         queryTimeout.stop()
+        statusChecked = true
         var next = queryCode === 0 ? State.parse(queryOut) : State.unknown()
         if (JSON.stringify(current) !== JSON.stringify(next)) current = next
         queryOut = ""
         querying = false
         queryManual = false
-        if (!current.known) message = "Не удалось подтвердить состояние. Обновите проверку."
+        if (!current.known) message = root.tr("status_unconfirmed")
         else if (pendingConfirmation !== "") {
             if (pendingConfirmation === "configure") {
                 if (Appearance.equal(current.appearance, submittedAppearance)) {
@@ -82,19 +87,19 @@ Ui.Panel {
                         appearanceDraft = Appearance.parse(current.appearance)
                         appearanceDirty = false
                         editor.syncColor()
-                        message = "Оформление применено."
+                        message = root.tr("appearance_applied")
                     } else {
                         appearanceDirty = true
-                        message = "Оформление применено. Новые изменения ещё не применены."
+                        message = root.tr("appearance_applied_dirty")
                     }
-                } else message = "Оформление не подтверждено. Изменения сохранены в предпросмотре."
+                } else message = root.tr("appearance_unconfirmed")
             } else if ((pendingConfirmation === "start" || pendingConfirmation === "enable") && current.loaded)
-                message = "Hyprveil загружен."
+                message = root.tr("loaded")
             else if (pendingConfirmation === "reload-config" && current.loaded)
-                message = appearanceDirty ? "Lua перечитана. Изменения в черновике ещё не применены." : "Lua перечитана. Текущие настройки показаны."
+                message = appearanceDirty ? root.tr("lua_reloaded_dirty") : root.tr("lua_reloaded")
             else if (current.loaded && current.mode === pendingConfirmation)
-                message = "Настройка применена."
-            else message = "Состояние изменилось после команды. Текущий стиль показан выше."
+                message = root.tr("setting_applied")
+            else message = root.tr("state_changed")
         }
         if (current.known && !appearanceDirty && !Appearance.equal(appearanceDraft, current.appearance)) {
             appearanceDraft = Appearance.parse(current.appearance)
@@ -159,14 +164,14 @@ Ui.Panel {
         if (!acting || !actionFinished) return
         actionTimeout.stop()
         acting = false
-        if (actionTimedOut) message = "Контроллер не ответил вовремя. Состояние требует новой проверки."
+        if (actionTimedOut) message = root.tr("controller_timeout")
         else if (actionCode !== 0) message = actionName === "configure"
-            ? "Не удалось применить оформление. Проверьте конфигурацию Lua."
-            : actionName === "reload-config" ? "Не удалось перечитать Lua. Проверьте конфигурацию Hyprland."
-            : "Переключение не подтверждено. Проверьте состояние или журнал контроллера."
+            ? root.tr("appearance_failed")
+            : actionName === "reload-config" ? root.tr("lua_failed")
+            : root.tr("action_unconfirmed")
         else {
             pendingConfirmation = actionName
-            message = "Команда выполнена. Проверяем состояние…"
+            message = root.tr("command_checking")
         }
         Qt.callLater(function() { refresh(false) })
     }
@@ -218,9 +223,10 @@ Ui.Panel {
             query.running = false
             root.querying = false
             root.queryManual = false
+            root.statusChecked = true
             root.queryOut = ""
             root.current = State.unknown()
-            root.message = "Проверка не ответила вовремя. Повторите её."
+            root.message = root.tr("query_timeout")
             root.queuedAction = ""; root.queuedAppearance = null
             root.idleReady()
         }
@@ -326,7 +332,7 @@ Ui.Panel {
                             spacing: Style.space(4)
                             Text {
                                 width: parent.width
-                                text: "Приватность"
+                                text: root.tr("privacy")
                                 textFormat: Text.PlainText
                                 color: root.foreground
                                 font.family: root.fontFamily
@@ -336,7 +342,7 @@ Ui.Panel {
                             }
                             Text {
                                 width: parent.width
-                                text: "Hyprveil · захват экрана"
+                                text: root.tr("capture_subtitle")
                                 textFormat: Text.PlainText
                                 color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.43)
                                 font.family: root.fontFamily
@@ -357,9 +363,9 @@ Ui.Panel {
                             Text {
                                 id: pillText
                                 anchors.centerIn: parent
-                                text: root.acting ? "Смена…" : root.querying && root.queryManual ? "Проверка" : !root.current.known ? (root.querying ? "Проверка" : "Нет связи")
-                                    : root.current.mode === "spoiler" ? "Спойлер" : root.current.mode === "omit" ? "Скрыто"
-                                    : root.current.mode === "black" ? "Маска" : root.current.loaded ? "Картинка" : "Не загружен"
+                                text: root.acting ? root.tr("changing") : root.querying && root.queryManual ? root.tr("checking_short") : !root.current.known ? (!root.statusChecked && root.querying ? root.tr("checking_short") : root.tr("offline"))
+                                    : root.current.mode === "spoiler" ? root.tr("spoiler") : root.current.mode === "omit" ? root.tr("hidden_short")
+                                    : root.current.mode === "black" ? root.tr("mask_short") : root.current.loaded ? root.tr("image_short") : root.tr("unloaded_short")
                                 textFormat: Text.PlainText
                                 color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.62)
                                 font.family: root.fontFamily
@@ -368,23 +374,45 @@ Ui.Panel {
                         }
                     }
                     WindowPrivacy {
+                        language: root.language
                         privacy: root.hostWidget ? root.hostWidget.focusPrivacy : Privacy.unknown()
                         busy: !!(root.hostWidget && root.hostWidget.privacyBusy)
                         fontFamily: root.fontFamily
                         onToggleRequested: if (root.hostWidget) root.hostWidget.togglePrivacy()
                     }
+                    Column {
+                        width: parent.width
+                        spacing: Style.space(8)
+                        visible: !root.current.known && !root.acting
+                        Text {
+                            width: parent.width
+                            text: root.tr("prerequisite")
+                            textFormat: Text.PlainText
+                            color: Color.muted
+                            font.family: root.fontFamily
+                            font.pixelSize: Style.space(11)
+                            wrapMode: Text.WordWrap
+                        }
+                        Button {
+                            text: root.tr("setup_guide")
+                            fontFamily: root.fontFamily
+                            fontSize: Style.space(11)
+                            focusable: true
+                            onClicked: Qt.openUrlExternally("https://github.com/OBJLAKO/hyprveil#quick-start")
+                        }
+                    }
                     Row {
                         width: parent.width; spacing: Style.space(6)
                         Button {
                             width: (parent.width - parent.spacing) / 2
-                            text: "Скрытие"; selected: root.tab === "hide"; focusable: true
+                            text: root.tr("hiding"); selected: root.tab === "hide"; focusable: true
                             fontFamily: root.fontFamily; fontSize: Style.space(12)
                             onClicked: root.setTab("hide")
                         }
                         Button {
                             id: customTab
                             width: (parent.width - parent.spacing) / 2
-                            text: "Оформление" + (root.appearanceDirty ? " ·" : ""); selected: root.tab === "customize"; focusable: true
+                            text: root.tr("appearance") + (root.appearanceDirty ? " ·" : ""); selected: root.tab === "customize"; focusable: true
                             fontFamily: root.fontFamily; fontSize: Style.space(12)
                             hasCursor: root.cursor === root.options().indexOf("customize") && root.tab === "hide"
                             onClicked: root.setTab("customize")
@@ -393,7 +421,7 @@ Ui.Panel {
                     Text {
                         width: parent.width
                         visible: root.current.spoilerFallback
-                        text: root.acting ? "Переключаем стиль…" : root.querying && root.queryManual ? "Проверяем состояние…" : State.label(root.current.mode, root.current.spoilerFallback)
+                        text: root.acting ? root.tr("changing_style") : root.querying && root.queryManual ? root.tr("checking") : State.label(root.current.mode, root.current.spoilerFallback, root.language)
                         textFormat: Text.PlainText
                         color: root.current.spoilerFallback ? Color.urgent : root.current.known ? root.foreground : Color.muted
                         font.family: root.fontFamily
@@ -404,11 +432,11 @@ Ui.Panel {
                     width: parent.width
                     spacing: Style.space(12)
                     visible: root.tab === "hide"
-                    PanelSectionHeader { text: "Вид скрытого окна"; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.space(11) }
+                    PanelSectionHeader { text: root.tr("hidden_style"); foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.space(11) }
                     StyleRow {
                         id: spoilerRow
-                        title: "Спойлер"
-                        detail: "Мягкое мерцание на тёмной поверхности"
+                        title: root.tr("spoiler")
+                        detail: root.tr("spoiler_detail")
                         mode: "spoiler"
                         appearance: root.current.appearance
                         animate: root.opened
@@ -421,8 +449,8 @@ Ui.Panel {
                     }
                     StyleRow {
                         id: omitRow
-                        title: "Полностью скрыть"
-                        detail: "Окно полностью исключается из захвата"
+                        title: root.tr("omit")
+                        detail: root.tr("omit_detail")
                         mode: "omit"
                         selected: root.current.loaded && root.current.mode === mode
                         enabled: root.current.known && root.current.loaded && !root.busy
@@ -433,8 +461,8 @@ Ui.Panel {
                     }
                     StyleRow {
                         id: blackRow
-                        title: "Обычная маска"
-                        detail: "Ровная чёрная заливка"
+                        title: root.tr("black")
+                        detail: root.tr("black_detail")
                         mode: "black"
                         selected: root.current.loaded && root.current.mode === mode
                         enabled: root.current.known && root.current.loaded && !root.busy
@@ -445,7 +473,7 @@ Ui.Panel {
                     }
                     Text {
                         width: parent.width
-                        text: "На вашем экране окна выглядят как прежде."
+                        text: root.tr("desktop_unchanged")
                         textFormat: Text.PlainText
                         color: Color.muted
                         font.family: root.fontFamily
@@ -456,7 +484,7 @@ Ui.Panel {
                         id: loadButton
                         visible: root.current.known && !root.current.loaded
                         width: parent.width
-                        text: root.current.enabled ? "Загрузить Hyprveil" : "Включить Hyprveil"
+                        text: root.current.enabled ? root.tr("load") : root.tr("enable")
                         enabled: !root.busy
                         bordered: true
                         foreground: root.foreground
@@ -473,7 +501,7 @@ Ui.Panel {
                         Button {
                         id: resetButton
                         width: parent.width - refreshButton.width - parent.spacing
-                        text: "Вернуть исходное скрытие"
+                        text: root.tr("reset_hiding")
                         enabled: root.current.known && root.current.loaded && !root.busy
                         leftAlign: true
                         foreground: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.7)
@@ -488,7 +516,7 @@ Ui.Panel {
                             id: refreshButton
                             width: Style.space(31)
                             text: "↻"
-                            tooltipText: "Обновить состояние"
+                            tooltipText: root.tr("refresh")
                             enabled: !root.busy
                             fontFamily: root.fontFamily
                             fontSize: Style.space(16)
@@ -500,7 +528,7 @@ Ui.Panel {
                     }
                     Text {
                         width: parent.width
-                        text: "Окна полностью исключаются из захвата."
+                        text: root.tr("omit_note")
                         textFormat: Text.PlainText
                         color: Color.muted
                         font.family: root.fontFamily
@@ -509,6 +537,7 @@ Ui.Panel {
                     }
                     }
                     AppearanceEditor {
+                        language: root.language
                         id: editor
                         width: parent.width
                         visible: root.tab === "customize"
@@ -533,7 +562,7 @@ Ui.Panel {
                         Text {
                             width: parent.width - reloadLuaButton.width - parent.spacing
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "Настройки Hyprland · Lua"
+                            text: root.tr("lua_settings")
                             textFormat: Text.PlainText
                             color: Color.muted
                             font.family: root.fontFamily
@@ -543,8 +572,8 @@ Ui.Panel {
                         Button {
                             id: reloadLuaButton
                             width: Style.space(132)
-                            text: "Перечитать Lua"
-                            tooltipText: "Применить изменения из ~/.config/hypr/hyprveil-settings.lua\nЧерновик оформления сохранится."
+                            text: root.tr("reload_lua")
+                            tooltipText: root.tr("reload_lua_hint")
                             enabled: !root.busy
                             fontFamily: root.fontFamily
                             fontSize: Style.space(11)

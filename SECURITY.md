@@ -14,8 +14,14 @@ native rendering or capture problems to
 
 Compositor-based capture is the intended boundary. Direct DRM/KMS scanout
 bypasses that boundary and is not protected. Physical displays and cameras
-are also outside it. See the [panel guide](plugin/README.md#safety-boundary)
+are also outside it. See the [panel guide](docs/GUIDE.md#safety-boundary)
 and [native core](https://github.com/OBJLAKO/hyprveil) before choosing a recorder.
+
+The widget and its Python helpers run as ordinary, unsandboxed user code.
+They require the separately installed native core. Repository tests and local
+static checks do not constitute marketplace verification or a guarantee of
+capture safety. See the [reviewer notes](docs/REVIEW.md) for the command and
+installation scope.
 
 There is no promised response deadline or support for old releases. Use the
 current repository version with the matching native API and compositor ABI.

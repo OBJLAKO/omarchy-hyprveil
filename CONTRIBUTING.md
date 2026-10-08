@@ -10,7 +10,7 @@ the repository root:
 
 ```sh
 python3 -m unittest discover -s tests -v
-node plugin/tests/state.test.cjs
+node tests/state.test.cjs
 ```
 
 These are the checks in [CI](.github/workflows/tests.yml). Node tests also
@@ -21,20 +21,27 @@ Background polling must preserve dirty drafts and steady control geometry.
 With Omarchy and Quickshell installed, run the synthetic QML checks:
 
 ```sh
-python3 plugin/tests/qml-smoke.py --native-config
-python3 plugin/tests/qml-smoke.py --status-failure
-python3 plugin/tests/qml-smoke.py --configure-failure
+python3 tests/qml-smoke.py --native-config
+python3 tests/qml-smoke.py --status-failure
+python3 tests/qml-smoke.py --configure-failure
 ```
 
 Pillow is additionally needed for color checks and documentation previews:
 
 ```sh
-python3 plugin/tests/preview-colors.py
+python3 tests/preview-colors.py
 python3 assets/render-previews.py
 ```
 
 Use synthetic windows and offscreen fixtures for shared test evidence.
 Never add personal desktop captures, titles, session identifiers, local
-absolute paths, binaries or runtime artifacts. Production source is in
-`plugin/`; standalone installer helpers are in `tools/`. The
+absolute paths, binaries or runtime artifacts. QML, JavaScript, the watcher
+and the single plugin manifest are at the repository root. Optional installer
+helpers are in `tools/`. The
 [native core](https://github.com/OBJLAKO/hyprveil) is a separate repository.
+
+Keep the permanent plugin ID `io.github.objlako.hyprveil`. A normal Omarchy
+installation reads the root manifest and does not run a post-install hook.
+Document new dependencies and file changes in the root README; installation
+instructions for remote source must pin a full commit and fail closed before
+execution. Do not present a local preflight as marketplace verification.

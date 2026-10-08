@@ -1,4 +1,5 @@
 .import "Appearance.js" as Appearance
+.import "I18n.js" as I18n
 // Pure state parser, shared with the adversarial-input tests. Never retain
 // arbitrary status fields: they can contain paths or future client metadata.
 var modes = ["omit", "black", "spoiler", "image"];
@@ -35,14 +36,10 @@ function parse(text) {
     }
 }
 
-function label(mode, spoilerFallback) {
-    if (mode === "spoiler" && spoilerFallback) return "Спойлер недоступен: используется чёрная маска";
-    if (mode === "spoiler") return "Спойлер";
-    if (mode === "omit") return "Полностью скрыть";
-    if (mode === "black") return "Обычная маска";
-    if (mode === "image") return "Своя картинка";
-    if (mode === "native") return "Hyprveil не загружен";
-    return "Состояние не подтверждено";
+function label(mode, spoilerFallback, locale) {
+    if (mode === "spoiler" && spoilerFallback) return I18n.text("spoiler_fallback", locale);
+    var key = {spoiler: "spoiler", omit: "omit", black: "black", image: "custom_image", native: "unloaded"};
+    return I18n.text(Object.prototype.hasOwnProperty.call(key, mode) ? key[mode] : "unknown", locale);
 }
 
 function allowed(action, state) {
