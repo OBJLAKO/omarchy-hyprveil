@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-label="Hyprveil for Omarchy">
+  <defs>
+    <linearGradient id="field" x2="1" y2="1"><stop stop-color="#161e24"/><stop offset=".52" stop-color="#0e1317"/><stop offset="1" stop-color="#141c20"/></linearGradient>
+    <linearGradient id="satin"><stop stop-color="#b8ced9" stop-opacity="0"/><stop offset=".48" stop-color="#b8ced9" stop-opacity=".10"/><stop offset="1" stop-color="#b8ced9" stop-opacity="0"/></linearGradient>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".72" numOctaves="3" seed="7" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>
+  </defs>
+  <rect width="1280" height="360" rx="26" fill="url(#field)"/>
+  <path d="M-80 75C260-75 590 330 1380 150" fill="none" stroke="url(#satin)" stroke-width="100"/>
+  <rect x="1" y="1" width="1278" height="358" rx="25" fill="none" stroke="#303c43"/>
+  <rect width="1280" height="360" rx="26" filter="url(#grain)" opacity=".027"/>
+  <g transform="translate(108 112) scale(5.3)" fill="none" stroke="#d8dbd6" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2.5 12C7.25 5.6 16.75 5.6 21.5 12C16.75 18.4 7.25 18.4 2.5 12Z"/>
+    <circle cx="12" cy="12" r="2.45"/>
+    <path d="M4 4.5L20 19.5"/>
+  </g>
+  <text x="288" y="181" fill="#e5e8e3" font-family="Inter,Adwaita Sans,Segoe UI,sans-serif" font-size="76" font-weight="600" letter-spacing="-2">Hyprveil</text>
+  <text x="293" y="230" fill="#93a7b1" font-family="Inter,Adwaita Sans,Segoe UI,sans-serif" font-size="22" letter-spacing="5">FOR OMARCHY</text>
+  <g transform="translate(1012 142)" fill="#aec5cf" opacity=".42"><circle cx="4" cy="2" r="1"/><circle cx="34" cy="-13" r="1.5"/><circle cx="52" cy="15" r=".8"/><circle cx="12" cy="39" r="1.2"/><circle cx="75" cy="-4" r="1"/><circle cx="88" cy="42" r="1.4"/><circle cx="48" cy="63" r="1"/><circle cx="115" cy="18" r=".8"/><circle cx="97" cy="83" r="1"/></g>
+</svg>

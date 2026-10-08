@@ -1,0 +1,273 @@
+#!/usr/bin/python3
+"""Stream minimal, atomic active-window privacy from one attested compositor.
+
+This helper is read-only. Socket events are wakeups: their payloads are never
+decoded, emitted or saved. Tag changes also reconcile every half second.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import pwd
+import re
+import select
+import selectors
+import socket
+import stat
+import struct
+import subprocess
+import sys
+import time
+
+UNKNOWN = {"state": "unknown", "address": "", "stable_id": "", "native_private": False, "inherited": False}
+FIELDS = frozenset(UNKNOWN)
+POLL_SECONDS = 0.5
+EVENT_SECONDS = 0.1
+QUERY_SECONDS = 1.0
+OUTPUT_LIMIT = 4096
+EVENT_LINE_LIMIT = 65536
+
+
+class Refused(RuntimeError):
+    pass
+
+
+class Unreaped(Refused):
+    pass
+
+
+def validate_signature(value):
+    if not isinstance(value, str) or not 1 <= len(value) <= 160 or value in (".", "..") or not re.fullmatch(r"[A-Za-z0-9_.-]+", value):
+        raise Refused("invalid instance")
+    return value
+
+
+def validate_state(value):
+    if not isinstance(value, dict) or value.keys() != FIELDS or value["state"] not in ("hidden", "visible", "none") or \
+       type(value["native_private"]) is not bool or type(value["inherited"]) is not bool or not isinstance(value["address"], str) or \
+       not isinstance(value["stable_id"], str):
+        raise Refused("invalid privacy response")
+    if value["state"] == "none":
+        if value["address"] or value["stable_id"] or value["native_private"] or value["inherited"]:
+            raise Refused("inconsistent empty state")
+    elif not re.fullmatch(r"0x[1-9a-f][0-9a-f]{0,15}", value["address"]):
+        raise Refused("invalid window identity")
+    elif not re.fullmatch(r"[1-9][0-9]{0,19}", value["stable_id"]) or int(value["stable_id"]) > 18446744073709551615:
+        raise Refused("invalid stable window identity")
+    if value["state"] == "visible" and (value["native_private"] or value["inherited"]) or \
+       value["state"] == "hidden" and not (value["native_private"] or value["inherited"]) or \
+       value["native_private"] and value["inherited"]:
+        raise Refused("inconsistent privacy state")
+    return {key: value[key] for key in UNKNOWN}
+
+
+def unique_object(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise Refused("duplicate response field")
+        value[key] = item
+    return value
+
+
+def fixed_env(runtime, signature):
+    return {"PATH": "/usr/bin:/bin", "HOME": pwd.getpwuid(os.getuid()).pw_dir, "LANG": "C.UTF-8",
+            "XDG_RUNTIME_DIR": str(runtime), "HYPRLAND_INSTANCE_SIGNATURE": signature}
+
+
+def query(runtime, signature):
+    argv = ["/usr/bin/hyprctl", "-i", signature, "hyprveil", "active-privacy"]
+    process = subprocess.Popen(argv, env=fixed_env(runtime, signature), stdin=subprocess.DEVNULL,
+                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    output = bytearray()
+    deadline = time.monotonic() + QUERY_SECONDS
+    try:
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdout, selectors.EVENT_READ)
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not selector.select(remaining):
+                    raise Refused("privacy query timed out")
+                chunk = os.read(process.stdout.fileno(), min(4096, OUTPUT_LIMIT + 1 - len(output)))
+                if not chunk:
+                    selector.unregister(process.stdout)
+                else:
+                    output.extend(chunk)
+                    if len(output) > OUTPUT_LIMIT:
+                        raise Refused("oversized privacy response")
+        if process.wait(timeout=max(0.001, deadline - time.monotonic())):
+            raise Refused("privacy query failed")
+        return validate_state(json.loads(output, object_pairs_hook=unique_object))
+    finally:
+        if process.poll() is None:
+            process.kill()
+        try:
+            process.wait(timeout=0.5)
+        except subprocess.TimeoutExpired as error:
+            raise Unreaped("query child could not be reaped") from error
+        finally:
+            process.stdout.close()
+
+
+def identity(path, directory=False):
+    info = path.lstat()
+    correct = stat.S_ISDIR(info.st_mode) if directory else stat.S_ISSOCK(info.st_mode)
+    if not correct or info.st_uid != os.getuid() or directory and stat.S_IMODE(info.st_mode) != 0o700:
+        raise Refused("unowned session path")
+    return info.st_dev, info.st_ino
+
+
+def process_identity(pid):
+    folder = Path("/proc") / str(pid)
+    if folder.stat().st_uid != os.getuid():
+        raise Refused("unowned compositor")
+    with (folder / "stat").open("rb") as handle:
+        data = handle.read(4097)
+    if len(data) > 4096:
+        raise Refused("oversized process identity")
+    fields = data[data.rfind(b")") + 2:].split()
+    if len(fields) < 20 or not fields[19].isdigit():
+        raise Refused("invalid process identity")
+    executable = os.readlink(folder / "exe").removesuffix(" (deleted)")
+    if Path(executable).name != "Hyprland":
+        raise Refused("event peer is not Hyprland")
+    return pid, fields[19]
+
+
+def lab_marker(runtime, signature, pid):
+    path = runtime / ".hyprveil-lab"
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1:
+            raise Refused("invalid lab marker")
+        data = os.read(fd, 4097)
+    finally:
+        os.close(fd)
+    if len(data) > 4096:
+        raise Refused("oversized lab marker")
+    value = json.loads(data)
+    if value.get("runtime_dir") != str(runtime) or value.get("signature") != signature or type(value.get("pid")) is not int or value["pid"] != pid:
+        raise Refused("lab marker does not attest this instance")
+
+
+class BoundSession:
+    def __init__(self, runtime, signature, lab=False):
+        self.runtime, self.signature = Path(runtime), validate_signature(signature)
+        standard = Path(f"/run/user/{os.getuid()}")
+        if not self.runtime.is_absolute() or self.runtime.resolve() != self.runtime or not lab and self.runtime != standard:
+            raise Refused("runtime is not the selected owned session")
+        base = self.runtime / "hypr" / self.signature
+        self.paths = {path: identity(path, True) for path in (self.runtime, self.runtime / "hypr", base)}
+        self.paths.update({path: identity(path) for path in (base / ".socket.sock", base / ".socket2.sock")})
+        self.events = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            self.events.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 8192)
+            self.events.settimeout(1.0)
+            self.events.connect(str(base / ".socket2.sock"))
+            pid, uid, _ = struct.unpack("3i", self.events.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")))
+            if uid != os.getuid() or pid <= 0:
+                raise Refused("unowned event peer")
+            self.target = process_identity(pid)
+            # Both IPC endpoints must belong to the same selected compositor.
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as control:
+                control.settimeout(1.0)
+                control.connect(str(base / ".socket.sock"))
+                control_pid, control_uid, _ = struct.unpack("3i", control.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")))
+                if (control_pid, control_uid) != (pid, uid):
+                    raise Refused("IPC peers disagree")
+            if lab:
+                lab_marker(self.runtime, self.signature, pid)
+            self.events.setblocking(False)
+            self.verify()
+        except BaseException:
+            self.close()
+            raise
+
+    def verify(self):
+        for path, expected in self.paths.items():
+            if identity(path, path.name not in (".socket.sock", ".socket2.sock")) != expected:
+                raise Refused("session path replaced")
+        if process_identity(self.target[0]) != self.target:
+            raise Refused("compositor identity changed")
+
+    def close(self):
+        self.events.close()
+
+
+class EventWakeup:
+    def __init__(self):
+        self.partial = 0
+
+    def feed(self, data):
+        # Track lengths without ever accumulating or decoding private payloads.
+        parts = data.split(b"\n")
+        if self.partial + len(parts[0]) > EVENT_LINE_LIMIT or any(len(part) > EVENT_LINE_LIMIT for part in parts[1:]):
+            raise Refused("oversized event line")
+        self.partial = self.partial + len(data) if len(parts) == 1 else len(parts[-1])
+        return len(parts) > 1
+
+
+class Emitter:
+    def __init__(self):
+        self.last = None
+
+    def emit(self, value):
+        if value != self.last:
+            print(json.dumps(value, separators=(",", ":")), flush=True)
+            self.last = dict(value)
+
+
+def watch(session, emitter, once=False):
+    events = EventWakeup()
+    dirty, next_poll, next_event = False, 0.0, 0.0
+    while True:
+        now = time.monotonic()
+        if now >= next_poll or dirty and now >= next_event:
+            session.verify()
+            try:
+                value = query(session.runtime, session.signature)
+            except Unreaped:
+                raise
+            except (OSError, ValueError, TypeError, Refused, subprocess.SubprocessError):
+                value = UNKNOWN
+            session.verify()
+            emitter.emit(value)
+            if once:
+                return 0 if value["state"] != "unknown" else 1
+            now = time.monotonic()
+            next_poll, next_event, dirty = now + POLL_SECONDS, now + EVENT_SECONDS, False
+        deadline = min(next_poll, next_event) if dirty else next_poll
+        ready, _, _ = select.select([session.events], [], [], max(0.0, deadline - time.monotonic()))
+        if ready:
+            data = session.events.recv(4096)
+            if not data:
+                raise Refused("event peer closed")
+            dirty = events.feed(data) or dirty
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("action", nargs="?", choices=("watch",), default="watch")
+    parser.add_argument("--once", action="store_true")
+    parser.add_argument("--lab-runtime", type=Path, help="explicit owned marked lab for synthetic verification")
+    args = parser.parse_args()
+    emitter, session = Emitter(), None
+    try:
+        runtime = args.lab_runtime or Path(os.environ.get("XDG_RUNTIME_DIR", ""))
+        session = BoundSession(runtime, os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", ""), lab=args.lab_runtime is not None)
+        return watch(session, emitter, args.once)
+    except (KeyboardInterrupt, BrokenPipeError):
+        return 0
+    except (OSError, ValueError, TypeError, Refused, subprocess.SubprocessError):
+        emitter.emit(UNKNOWN)
+        return 1
+    finally:
+        if session is not None:
+            session.close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

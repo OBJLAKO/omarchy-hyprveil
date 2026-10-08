@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "sky.hyprveil",
+  "name": "Hyprveil — стиль скрытия",
+  "version": "1.4.0",
+  "author": "OBJLAKO",
+  "description": "Самостоятельная панель Omarchy для нативных настроек Hyprveil и приватности активного окна.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Hyprveil",
+    "description": "ЛКМ или средняя кнопка: приватность окна. ПКМ: стили и оформление.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
