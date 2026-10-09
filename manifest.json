@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "io.github.objlako.hyprveil",
   "name": "Hyprveil",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "author": "OBJLAKO",
-  "description": "Window capture privacy and spoiler styles, directly from the Omarchy bar.",
+  "description": "Keep private windows visible on your desktop and hidden from screen sharing. First click sets up the native Hyprland plugin with hyprpm in a terminal; setup shows changes and asks first.",
   "kinds": [
     "bar-widget"
   ],
@@ -13,7 +13,7 @@
   },
   "barWidget": {
     "displayName": "Hyprveil",
-    "description": "Left or middle click: window privacy. Right click: styles and appearance.",
+    "description": "First click: native setup. Left/middle click: window privacy. Right click: appearance.",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right"

@@ -22,8 +22,10 @@ Ui.BarWidget {
     property bool privacyBusy: false
     readonly property bool privacyDispatching: privacyProcess.running
     property bool privacyConfirmed: false
-    property bool privacyReplySeen: false
-    property bool privacyReplyGood: false
+    property bool privacyFinished: true
+    property bool privacyTimedOut: false
+    property string privacyReply: ""
+    property string privacyWatchBuffer: ""
     property var focusPrivacy: Privacy.unknown()
     property var privacyTarget: Privacy.unknown()
     property bool privacyQueued: false
@@ -32,20 +34,71 @@ Ui.BarWidget {
     implicitWidth: button.implicitWidth
     implicitHeight: button.implicitHeight
 
+    readonly property string repositoryPath: decodeURIComponent(Qt.resolvedUrl(".").toString().replace(/^file:\/\//, "")).replace(/\/$/, "")
+    function shellQuote(value) { return "'" + String(value).replace(/'/g, "'\\''") + "'" }
+    function setup() {
+        Util.execArgv(["omarchy-launch-floating-terminal-with-presentation", "cd " + shellQuote(repositoryPath) + " && ./install.sh"])
+    }
     function open() { panel.open() }
     function close() { panel.close() }
     function toggle() { panel.toggle() }
     function closeForPopoutSwitch() { panel.closeForPopoutSwitch() }
+    Timer {
+        interval: panel.current.loaded ? 30000 : 5000
+        repeat: true
+        triggeredOnStart: true
+        running: !panel.opened
+        onTriggered: panel.refresh(false, true)
+    }
     function togglePrivacy() {
+        if (panel.current.known && !panel.current.loaded && !panel.current.loadSupported) { setup(); return }
+        if (focusPrivacy.state === "unknown") { panel.open(); return }
         if (!Privacy.allowed(currentSignature, privacyBusy || privacyDispatching, panel.busy, focusPrivacy)) return
         if (panel.querying) { privacyQueuedTarget = Privacy.normalized(focusPrivacy); privacyQueued = true; return }
         privacyBusy = true
         privacyTarget = Privacy.normalized(focusPrivacy)
-        privacyReplySeen = false
-        privacyReplyGood = false
+        privacyFinished = false
+        privacyTimedOut = false
+        privacyReply = ""
         privacyConfirmed = false
         privacyTimeout.restart()
         privacyProcess.running = true
+    }
+    function finishPrivacy(code) {
+        if (privacyFinished) return
+        privacyFinished = true
+        privacyTimeout.stop()
+        if (privacyTimedOut || code !== 0 || privacyReply.trim() !== "ok") {
+            privacyBusy = false
+            panel.message = root.tr(privacyTimedOut ? "privacy_unconfirmed" : "privacy_dispatch_failed")
+            panel.refresh(false)
+        } else if (privacyConfirmed) privacyBusy = false
+        else if (privacyBusy) privacyTimeout.restart()
+    }
+    function collectPrivacyReply(chunk) {
+        if (privacyReply.length + chunk.length > 2048) {
+            privacyReply = ""
+            privacyTimedOut = true
+            privacyProcess.signal(9)
+        } else if (!privacyTimedOut) privacyReply += chunk
+    }
+    function collectPrivacyWatch(chunk) {
+        var start = 0
+        while (start < chunk.length) {
+            var end = chunk.indexOf("\n", start)
+            var stop = end < 0 ? chunk.length : end
+            if (privacyWatchBuffer.length + stop - start > 2048) {
+                privacyWatchBuffer = ""
+                focusPrivacy = Privacy.unknown()
+                privacyWatcher.signal(9)
+                return
+            }
+            privacyWatchBuffer += chunk.slice(start, stop)
+            if (end < 0) return
+            consumePrivacy(privacyWatchBuffer)
+            privacyWatchBuffer = ""
+            start = end + 1
+        }
     }
     function consumePrivacy(line) {
         var next = Privacy.parse(line)
@@ -83,9 +136,13 @@ Ui.BarWidget {
         clearEnvironment: true
         environment: panel.processEnvironment
         running: true
-        stdout: SplitParser { onRead: function(line) { root.consumePrivacy(line) } }
-        stderr: SplitParser { onRead: function(line) {} }
-        onExited: { root.focusPrivacy = Privacy.unknown(); watcherReconnect.restart() }
+        stdout: SplitParser { splitMarker: ""; onRead: function(chunk) { root.collectPrivacyWatch(chunk) } }
+        stderr: SplitParser { splitMarker: ""; onRead: function(chunk) {} }
+        onRunningChanged: if (!running) {
+            root.privacyWatchBuffer = ""
+            root.focusPrivacy = Privacy.unknown()
+            watcherReconnect.restart()
+        }
     }
     Timer { id: watcherReconnect; interval: 1500; onTriggered: privacyWatcher.running = true }
 
@@ -97,31 +154,21 @@ Ui.BarWidget {
         command: Privacy.command(root.currentSignature, root.privacyTarget)
         clearEnvironment: true
         environment: panel.processEnvironment
-        stdout: SplitParser {
-            onRead: function(line) {
-                if (String(line).trim() === "") return
-                root.privacyReplyGood = !root.privacyReplySeen && String(line).trim() === "ok"
-                root.privacyReplySeen = true
-            }
-        }
-        stderr: SplitParser { onRead: function(line) {} }
-        onExited: function(code) {
-            privacyTimeout.stop()
-            if (code !== 0 || !root.privacyReplyGood) {
-                root.privacyBusy = false
-                panel.message = root.tr("privacy_dispatch_failed")
-                panel.refresh(false)
-            } else if (root.privacyConfirmed) root.privacyBusy = false
-            else if (root.privacyBusy) privacyTimeout.restart()
-        }
+        stdout: SplitParser { splitMarker: ""; onRead: function(chunk) { root.collectPrivacyReply(chunk) } }
+        stderr: SplitParser { splitMarker: ""; onRead: function(chunk) {} }
+        onExited: function(code) { root.finishPrivacy(code) }
+        onRunningChanged: if (!running && !root.privacyFinished) root.finishPrivacy(-1)
     }
     Timer {
         id: privacyTimeout
         interval: 8000
         onTriggered: {
-            privacyProcess.running = false
-            root.privacyBusy = false
-            panel.message = root.tr("privacy_unconfirmed")
+            root.privacyTimedOut = true
+            if (privacyProcess.running) privacyProcess.signal(9)
+            else {
+                root.privacyBusy = false
+                panel.message = root.tr("privacy_unconfirmed")
+            }
         }
     }
 

@@ -9,9 +9,9 @@
   <rect x="1" y="1" width="1278" height="358" rx="25" fill="none" stroke="#303c43"/>
   <rect width="1280" height="360" rx="26" filter="url(#grain)" opacity=".027"/>
   <g transform="translate(108 112) scale(5.3)" fill="none" stroke="#d8dbd6" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M2.5 12C7.25 5.6 16.75 5.6 21.5 12C16.75 18.4 7.25 18.4 2.5 12Z"/>
-    <circle cx="12" cy="12" r="2.45"/>
-    <path d="M4 4.5L20 19.5"/>
+    <path d="M2 12C4.6 8.1 8 6 12 6C16 6 19.4 8.1 22 12C19.4 15.9 16 18 12 18C8 18 4.6 15.9 2 12Z"/>
+    <circle cx="12" cy="12" r="2.7"/>
+    <path d="M3.5 3.5L20.5 20.5"/>
   </g>
   <text x="288" y="181" fill="#e5e8e3" font-family="Inter,Adwaita Sans,Segoe UI,sans-serif" font-size="76" font-weight="600" letter-spacing="-2">Hyprveil</text>
   <text x="293" y="230" fill="#93a7b1" font-family="Inter,Adwaita Sans,Segoe UI,sans-serif" font-size="22" letter-spacing="5">FOR OMARCHY</text>

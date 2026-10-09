@@ -1,7 +1,11 @@
-// Exact controller/native appearance contract. No opacity or client-data field.
-var fields = ["variant", "color", "grain", "speed", "darkness", "eye", "eye_size"];
+// Exact controller/native appearance contract. Mask opacity is fixed; icon_opacity affects only the icon.
+var fields = ["variant", "color", "grain", "speed", "darkness", "eye", "eye_size", "icon", "icon_opacity"];
+var variants = ["prism", "signal", "aurora", "contour", "radar", "matte", "error404", "matrix", "anonymous", "glass"];
+var icons = ["eye", "lock", "shield", "none"];
+var aliases = {satin: "prism", telegram: "signal", grid: "radar", "404": "error404",
+               cmatrix: "matrix", anon: "anonymous", "liquid-glass": "glass", liquidglass: "glass"};
 function defaults() {
-    return { variant: "satin", color: "#ffffff", grain: 50, speed: 100, darkness: 50, eye: true, eye_size: 80 };
+    return { variant: "prism", color: "#ffffff", grain: 50, speed: 100, darkness: 50, eye: true, eye_size: 80, icon: "eye", icon_opacity: 75 };
 }
 function integer(value, minimum, maximum) {
     return typeof value === "number" && isFinite(value) && Math.floor(value) === value && value >= minimum && value <= maximum;
@@ -9,14 +13,21 @@ function integer(value, minimum, maximum) {
 function parse(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
     var keys = Object.keys(value);
-    if (keys.length !== fields.length) return null;
+    if (keys.length !== fields.length && keys.length !== fields.length - 2) return null;
     for (var i = 0; i < keys.length; ++i) if (fields.indexOf(keys[i]) < 0) return null;
-    if (["satin", "telegram"].indexOf(value.variant) < 0 ||
+    if (typeof value.variant !== "string") return null;
+    var variant = aliases[value.variant] || value.variant;
+    var legacy = keys.length === fields.length - 2;
+    var icon = legacy ? "eye" : value.icon;
+    var iconOpacity = legacy ? 75 : value.icon_opacity;
+    if (legacy && (value.icon !== undefined || value.icon_opacity !== undefined)) return null;
+    if (variants.indexOf(variant) < 0 ||
         typeof value.color !== "string" || !/^#[0-9a-f]{6}$/.test(value.color) ||
         !integer(value.grain, 0, 100) || !integer(value.speed, 0, 200) || !integer(value.darkness, 0, 100) ||
-        typeof value.eye !== "boolean" || !integer(value.eye_size, 40, 128)) return null;
-    return { variant: value.variant, color: value.color, grain: value.grain, speed: value.speed,
-             darkness: value.darkness, eye: value.eye, eye_size: value.eye_size };
+        typeof value.eye !== "boolean" || !integer(value.eye_size, 40, 128) ||
+        icons.indexOf(icon) < 0 || !integer(iconOpacity, 0, 100)) return null;
+    return { variant: variant, color: value.color, grain: value.grain, speed: value.speed,
+             darkness: value.darkness, eye: value.eye, eye_size: value.eye_size, icon: icon, icon_opacity: iconOpacity };
 }
 function equal(left, right) {
     var a = parse(left), b = parse(right);
@@ -36,5 +47,5 @@ function command(value) {
     if (!p) return [];
     return ["configure", "--variant", p.variant, "--color", p.color,
             "--grain", String(p.grain), "--speed", String(p.speed), "--darkness", String(p.darkness),
-            "--eye", p.eye ? "on" : "off", "--eye-size", String(p.eye_size)];
+            "--eye", p.eye ? "on" : "off", "--eye-size", String(p.eye_size), "--icon", p.icon, "--icon-opacity", String(p.icon_opacity)];
 }

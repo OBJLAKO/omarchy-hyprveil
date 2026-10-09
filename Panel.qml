@@ -21,7 +21,8 @@ Ui.Panel {
     readonly property var barIdentity: hostWidget || root
     readonly property color foreground: Color.popups.text
     readonly property string fontFamily: "Adwaita Sans"
-    readonly property string controllerPath: Quickshell.env("HOME") + "/.local/bin/hyprveil"
+    readonly property string controllerHelper: decodeURIComponent(Qt.resolvedUrl("panel-controller").toString().replace(/^file:\/\//, ""))
+    property var controllerCommand: ["/usr/bin/python3", controllerHelper]
     property var current: State.unknown()
     property string message: ""
     property bool querying: false
@@ -41,7 +42,8 @@ Ui.Panel {
     property string pendingConfirmation: ""
     property string queryOut: ""
     property bool queryFinished: false
-    property bool queryStdoutFinished: false
+    property bool queryTimedOut: false
+    property bool queryOverflow: false
     property int queryCode: -1
     property bool actionFinished: false
     property int actionCode: -1
@@ -59,27 +61,29 @@ Ui.Panel {
         return env
     }
 
-    function refresh(manual) {
-        if (!opened || busy || querying) return
+    function refresh(manual, background) {
+        if ((!opened && background !== true) || busy || querying) return
         querying = true
         queryManual = manual === true
         queryOut = ""
         queryFinished = false
-        queryStdoutFinished = false
+        queryTimedOut = false
+        queryOverflow = false
         queryCode = -1
         queryTimeout.restart()
         query.running = true
     }
     function finishQuery() {
-        if (!querying || !queryFinished || !queryStdoutFinished) return
+        if (!querying || !queryFinished) return
         queryTimeout.stop()
         statusChecked = true
-        var next = queryCode === 0 ? State.parse(queryOut) : State.unknown()
+        var next = queryCode === 0 && !queryTimedOut && !queryOverflow ? State.parse(queryOut) : State.unknown()
         if (JSON.stringify(current) !== JSON.stringify(next)) current = next
         queryOut = ""
         querying = false
         queryManual = false
-        if (!current.known) message = root.tr("status_unconfirmed")
+        if (queryTimedOut) message = root.tr("query_timeout")
+        else if (!current.known) message = root.tr("status_unconfirmed")
         else if (pendingConfirmation !== "") {
             if (pendingConfirmation === "configure") {
                 if (Appearance.equal(current.appearance, submittedAppearance)) {
@@ -114,6 +118,16 @@ Ui.Panel {
             else act(action)
         }
         idleReady()
+    }
+    function collectQuery(chunk) {
+        if (!querying || queryOverflow || queryTimedOut) return
+        // Parse raw chunks: a missing newline must not create an unbounded
+        // SplitParser or StdioCollector buffer in the shell process.
+        if (queryOut.length + chunk.length > 32768) {
+            queryOut = ""
+            queryOverflow = true
+            query.signal(9)
+        } else queryOut += chunk
     }
     function act(action) {
         if (!opened || busy || !State.allowed(action, current)) return
@@ -156,7 +170,7 @@ Ui.Panel {
         actionFinished = false
         actionTimedOut = false
         actionCode = -1
-        actionProcess.command = [controllerPath].concat(args)
+        actionProcess.command = controllerCommand.concat(args)
         actionTimeout.restart()
         actionProcess.running = true
     }
@@ -178,7 +192,7 @@ Ui.Panel {
     function options() {
         if (!current.known) return ["refresh"]
         return current.loaded ? ["spoiler", "omit", "black", "reset", "refresh", "reload-config", "customize"]
-                              : [current.enabled ? "start" : "enable", "refresh"]
+                              : current.loadSupported ? [current.enabled ? "start" : "enable", "refresh"] : ["refresh"]
     }
     function moveCursor(delta) {
         var list = options()
@@ -220,15 +234,14 @@ Ui.Panel {
         id: queryTimeout
         interval: 12000
         onTriggered: {
-            query.running = false
-            root.querying = false
-            root.queryManual = false
-            root.statusChecked = true
+            root.queryTimedOut = true
             root.queryOut = ""
             root.current = State.unknown()
             root.message = root.tr("query_timeout")
             root.queuedAction = ""; root.queuedAppearance = null
-            root.idleReady()
+            // running=false sends SIGTERM and can leave a stuck child alive.
+            // Retain ownership until its real exit; do not reuse this Process.
+            query.signal(9)
         }
     }
     Timer {
@@ -236,42 +249,48 @@ Ui.Panel {
         interval: 30000
         onTriggered: {
             root.actionTimedOut = true
-            actionProcess.running = false
-            root.actionFinished = true
-            root.finishAction()
+            actionProcess.signal(9)
         }
     }
     Process {
         id: query
-        command: [root.controllerPath, "status"]
+        command: root.controllerCommand.concat(["status"])
         clearEnvironment: true
         environment: root.processEnvironment
-        stdout: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: {
-                root.queryOut = text
-                root.queryStdoutFinished = true
-                root.finishQuery()
-            }
-        }
+        stdout: SplitParser { splitMarker: ""; onRead: function(chunk) { root.collectQuery(chunk) } }
         // Consume diagnostics without logging private installation paths.
-        stderr: SplitParser { onRead: function(line) {} }
+        stderr: SplitParser { splitMarker: ""; onRead: function(chunk) {} }
         onExited: function(code) {
             root.queryCode = code
             root.queryFinished = true
             root.finishQuery()
+        }
+        onRunningChanged: {
+            // FailedToStart has no exited signal in Quickshell.
+            if (!running && root.querying && !root.queryFinished) {
+                root.queryCode = -1
+                root.queryFinished = true
+                root.finishQuery()
+            }
         }
     }
     Process {
         id: actionProcess
         clearEnvironment: true
         environment: root.processEnvironment
-        stdout: SplitParser { onRead: function(line) {} }
-        stderr: SplitParser { onRead: function(line) {} }
+        stdout: SplitParser { splitMarker: ""; onRead: function(chunk) {} }
+        stderr: SplitParser { splitMarker: ""; onRead: function(chunk) {} }
         onExited: function(code) {
             root.actionCode = code
             root.actionFinished = true
             root.finishAction()
+        }
+        onRunningChanged: {
+            if (!running && root.acting && !root.actionFinished) {
+                root.actionCode = -1
+                root.actionFinished = true
+                root.finishAction()
+            }
         }
     }
 
@@ -398,7 +417,7 @@ Ui.Panel {
                             fontFamily: root.fontFamily
                             fontSize: Style.space(11)
                             focusable: true
-                            onClicked: Qt.openUrlExternally("https://github.com/OBJLAKO/hyprveil#quick-start")
+                            onClicked: Qt.openUrlExternally("https://github.com/OBJLAKO/omarchy-hyprveil#install")
                         }
                     }
                     Row {
@@ -439,7 +458,7 @@ Ui.Panel {
                         detail: root.tr("spoiler_detail")
                         mode: "spoiler"
                         appearance: root.current.appearance
-                        animate: root.opened
+                        animate: root.opened && root.tab === "hide"
                         selected: root.current.loaded && root.current.mode === mode
                         enabled: root.current.known && root.current.loaded && !root.busy
                         hasCursor: root.cursor === 0 && root.current.loaded
@@ -482,7 +501,7 @@ Ui.Panel {
                     }
                     Button {
                         id: loadButton
-                        visible: root.current.known && !root.current.loaded
+                        visible: root.current.known && !root.current.loaded && root.current.loadSupported
                         width: parent.width
                         text: root.current.enabled ? root.tr("load") : root.tr("enable")
                         enabled: !root.busy
@@ -493,6 +512,23 @@ Ui.Panel {
                         hasCursor: root.cursor === 0
                         onHovered: function(isHovered) { if (isHovered) root.cursor = 0 }
                         onClicked: root.act(root.current.enabled ? "start" : "enable")
+                    }
+                    Button {
+                        width: parent.width
+                        visible: root.current.known && !root.current.loaded && !root.current.loadSupported && !!root.hostWidget
+                        text: root.tr("setup_native")
+                        enabled: !root.busy
+                        foreground: root.foreground
+                        fontFamily: root.fontFamily
+                        onClicked: root.hostWidget.setup()
+                    }
+                    Text {
+                        width: parent.width
+                        visible: root.current.known && !root.current.loaded && !root.current.loadSupported
+                        text: root.tr("hyprpm_enable_hint")
+                        textFormat: Text.PlainText; color: Color.muted
+                        font.family: root.fontFamily; font.pixelSize: Style.space(11)
+                        wrapMode: Text.WordWrap
                     }
                     PanelSeparator { foreground: root.foreground; strength: 0.075 }
                     Row {
@@ -582,6 +618,14 @@ Ui.Panel {
                             onHovered: function(isHovered) { if (isHovered && root.tab === "hide") root.cursor = root.options().indexOf("reload-config") }
                             onClicked: root.act("reload-config")
                         }
+                    }
+                    Text {
+                        width: parent.width
+                        visible: root.current.known && root.current.loaded && !root.current.persistenceSupported
+                        text: root.tr("runtime_only")
+                        textFormat: Text.PlainText; color: Color.muted
+                        font.family: root.fontFamily; font.pixelSize: Style.space(11)
+                        wrapMode: Text.WordWrap
                     }
                     Text {
                         width: parent.width

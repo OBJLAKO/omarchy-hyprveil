@@ -14,67 +14,42 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "assets"
-APPEARANCE = {"variant": "telegram", "color": "#cbdcec", "grain": 65,
-              "speed": 100, "darkness": 50, "eye": True, "eye_size": 80}
-NATIVE_POSTER_SHA256 = "90d26f63344fcc0e2b5da3135fd49e35e3b9678dc00f20f0b382de5f52f46b2a"
+APPEARANCE = {"variant": "error404", "color": "#ffffff", "grain": 50,
+              "speed": 100, "darkness": 35, "eye": False, "eye_size": 80, "icon": "none", "icon_opacity": 75}
+NATIVE_POSTER_SHA256 = "6729773b98172779cf5aad9a8f73bbaa557c8add9e8ccd78255fbab5374e3a82"
 
 
 def marketplace_cover():
-    """Compose actual materials; never draw window contents or spoiler pixels."""
-    poster = ASSETS / "native-demo.png"
-    if hashlib.sha256(poster.read_bytes()).hexdigest() != NATIVE_POSTER_SHA256:
-        raise RuntimeError("native sample differs from its reviewed synthetic capture")
-    native = json.loads((ASSETS / "native-capture-provenance.json").read_text())
-    if (native.get("source") != "real Hyprland GPU captures in a fresh marked isolated compositor"
-            or not native.get("lab_stopped")
-            or not native.get("marker_absent_from_every_protected_frame")
-            or native["outputs"]["demo/poster.png"]["sha256"] != NATIVE_POSTER_SHA256):
-        raise RuntimeError("native sample lacks stopped, synthetic capture provenance")
-    cover = Image.new("RGB", (1600, 900), "#0e1619")
-    draw = ImageDraw.Draw(cover)
-    font_path = "/usr/share/fonts/Adwaita/AdwaitaSans-Regular.ttf"
-
-    def label(x, y, value, size, fill="#dce5e6"):
-        font = ImageFont.truetype(font_path, size)
-        draw.text((x, y), value, font=font, fill=fill)
-
-    draw.line((1046, 52, 1046, 840), fill="#2a3a40", width=1)
-    label(58, 38, "HYPRVEIL  /  OMARCHY", 19, "#9bb7c1")
-    label(54, 83, "Capture privacy", 73, "#edf2ed")
-    label(54, 164, "from your bar.", 73, "#edf2ed")
-    label(59, 258, "Keep your window visible. Choose what its capture reveals.", 24, "#a7bbb9")
-    label(59, 306, "ONE CLICK    ·    THREE STYLES    ·    LIVE APPEARANCE", 16, "#89aa9c")
-    with Image.open(poster) as sample:
-        cover.paste(sample.convert("RGB"), (58, 350))
-    label(59, 841, "Hyprveil native capture · synthetic notes", 16, "#91a9a3")
-    label(1089, 30, "REAL OMARCHY PANEL", 15, "#9bb7c1")
-    draw.rounded_rectangle((1077, 59, 1557, 836), radius=18, fill="#101315", outline="#32444c", width=1)
-    with Image.open(ASSETS / "appearance-panel.png") as panel:
-        panel = panel.convert("RGB").resize((456, 751), Image.Resampling.LANCZOS)
-        cover.paste(panel, (1089, 72))
-    label(1089, 848, "Offscreen QML · English / Russian", 15, "#8ba5ae")
-    cover.save(ROOT / "preview.png", optimize=True)
+    """The main cover is an explicit explanatory illustration, rendered separately."""
+    subprocess.run(["/usr/bin/python3", str(ASSETS / "render-cover.py")], check=True)
+    import shutil
+    shutil.copyfile(ASSETS / "social-preview.png", ROOT / "preview.png")
 
 
 def write_provenance():
     names = ["preview.png", "assets/hiding-panel.png", "assets/appearance-panel.png",
-             "assets/social-preview.png", "assets/spoiler-preview.gif", "assets/native-demo.png"]
+             "assets/social-preview.png", "assets/spoiler-preview.gif", "assets/native-demo.png", "assets/native-styles.gif"]
+    names += [str(path.relative_to(ROOT)) for path in sorted((ASSETS / "presets").glob("*"))]
     native = json.loads((ASSETS / "native-capture-provenance.json").read_text())
     data = {
         "version": 1,
         "ui": {"source": "real repository QML components rendered with Qt offscreen",
                "locale": "English (C.UTF-8)", "controller": "status-only synthetic fixture",
                "theme": "explicit synthetic palette in temporary HOME",
-               "personal_desktop_capture": False, "native_rendering": False},
+               "personal_desktop_capture": False, "native_compositor_session": False,
+               "preset_swatches": "actual synthetic native captures; assets/presets/provenance.json"},
         "native_sample": {"source": "Hyprveil native capture of synthetic GTK notes in a marked isolated compositor",
                           "native_sha256": native["native_sha256"], "lab_stopped": True,
                           "upstream_repository": "https://github.com/OBJLAKO/hyprveil",
                           "upstream_asset": "assets/demo/poster.png",
                           "sha256": NATIVE_POSTER_SHA256},
-        "composition": "crop-free scaling, labels and framing; no synthesized native window or mask pixels",
+        "cover": {"kind": "explanatory illustration", "desktop_capture": False, "provenance": "assets/cover-provenance.json"},
+        "composition": "QML screenshots are synthetic; native demo is an actual GPU capture; main cover is a labeled illustration",
         "outputs": {name: {"sha256": hashlib.sha256((ROOT / name).read_bytes()).hexdigest(),
                            "bytes": (ROOT / name).stat().st_size} for name in names},
     }
+    previous = json.loads((ASSETS / "provenance.json").read_text())
+    if "native_styles" in previous: data["native_styles"] = previous["native_styles"]
     (ASSETS / "provenance.json").write_text(json.dumps(data, indent=2) + "\n")
 
 with tempfile.TemporaryDirectory(prefix="hyprveil-public-preview-") as temporary:
@@ -170,41 +145,25 @@ ShellRoot {
         id: hidingWindow
         width: 510; height: 840; visible: true; color: "#101315"
         Rectangle { anchors.fill:parent; color:"#101315" }
-        Plugin.Panel { id: hiding; x:20; y:20; manageIpc:false; hostWidget:syntheticPrivacy }
+        Plugin.Panel { id: hiding; x:20; y:20; manageIpc:false; hostWidget:syntheticPrivacy
+            controllerCommand: [Quickshell.env("HOME") + "/.local/bin/hyprveil"] }
     }
     Window {
         id: appearanceWindow
         width: 510; height: 840; visible: true; color: "#101315"
         Rectangle { anchors.fill:parent; color:"#101315" }
-        Plugin.Panel { id: appearance; x:20; y:20; manageIpc:false; hostWidget:syntheticPrivacy }
-    }
-    Window {
-        id: socialWindow
-        width:1280; height:640; visible:true; color:"#10171b"
-        Rectangle { anchors.fill:parent; color:"#10171b" }
-        Image { x:0; y:0; width:1280; height:360; source:BRAND }
-        Text { x:90; y:362; text:"A focused control panel for capture privacy."; color:"#d9e2e2"; font.family:"Adwaita Sans"; font.pixelSize:30 }
-        Plugin.SpoilerPreview {
-            x:90; y:435; width:440; height:116; radius:12
-            appearance: APPEARANCE
-        }
-        Column {
-            x:580; y:437; spacing:15
-            Text { text:"WINDOW PRIVACY  /  NATIVE SETTINGS"; color:"#9cacb4"; font.family:"Adwaita Sans"; font.pixelSize:17; font.letterSpacing:2 }
-            Text { text:"Satin · Telegram · Black · Omit"; color:"#d4dcdd"; font.family:"Adwaita Sans"; font.pixelSize:25 }
-            Text { text:"OBJLAKO / omarchy-hyprveil"; color:"#778c96"; font.family:"Adwaita Sans"; font.pixelSize:17 }
-        }
-        Text { x:90; y:595; text:"Procedural UI preview · Native rendering belongs to Hyprveil."; color:"#778c96"; font.family:"Adwaita Sans"; font.pixelSize:14 }
+        Plugin.Panel { id: appearance; x:20; y:20; manageIpc:false; hostWidget:syntheticPrivacy
+            controllerCommand: [Quickshell.env("HOME") + "/.local/bin/hyprveil"] }
     }
     Window {
         id: texturesWindow
         width:960; height:350; visible:true; color:"#10171b"
         Rectangle { anchors.fill:parent; color:"#10171b" }
         Text { x:30; y:20; text:"Spoiler appearance"; color:"#d6e0e0"; font.family:"Adwaita Sans"; font.pixelSize:25 }
-        Text { x:31; y:67; text:"SATIN"; color:"#91a5af"; font.family:"Adwaita Sans"; font.pixelSize:13; font.letterSpacing:2 }
-        Text { x:497; y:67; text:"TELEGRAM"; color:"#91a5af"; font.family:"Adwaita Sans"; font.pixelSize:13; font.letterSpacing:2 }
-        Plugin.SpoilerPreview { id:satin; x:30; y:96; width:434; height:194; radius:12; appearance:({variant:"satin",color:"#cbdcec",grain:65,speed:100,darkness:50,eye:true,eye_size:80}) }
-        Plugin.SpoilerPreview { id:telegram; x:496; y:96; width:434; height:194; radius:12; appearance:APPEARANCE }
+        Text { x:31; y:67; text:"PRISM"; color:"#91a5af"; font.family:"Adwaita Sans"; font.pixelSize:13; font.letterSpacing:2 }
+        Text { x:497; y:67; text:"SIGNAL"; color:"#91a5af"; font.family:"Adwaita Sans"; font.pixelSize:13; font.letterSpacing:2 }
+        Plugin.SpoilerPreview { id:prism; x:30; y:96; width:434; height:194; radius:12; appearance:({variant:"prism",color:"#cbdcec",grain:65,speed:100,darkness:50,eye:true,eye_size:80,icon:"eye",icon_opacity:75}) }
+        Plugin.SpoilerPreview { id:signal; x:496; y:96; width:434; height:194; radius:12; appearance:({variant:"signal",color:"#cbdcec",grain:65,speed:100,darkness:50,eye:false,eye_size:80,icon:"none",icon_opacity:75}) }
         Text { x:31; y:312; text:"Procedural QML preview · No window pixels · Not a native capture recording"; color:"#7c909b"; font.family:"Adwaita Sans"; font.pixelSize:13 }
     }
     Timer {
@@ -221,12 +180,11 @@ ShellRoot {
                 root.panelsSaved=true
                 hidingWindow.contentItem.grabToImage(function(r) { r.saveToFile(HIDING) })
                 appearanceWindow.contentItem.grabToImage(function(r) { r.saveToFile(APPEARANCE_PANEL) })
-                socialWindow.contentItem.grabToImage(function(r) { r.saveToFile(SOCIAL) })
             }
             if (root.capturing) return
             root.capturing=true
-            satin.children.find(function(c) { return typeof c.phase === "number" }).phase=root.frame/32*Math.PI*2
-            telegram.children.find(function(c) { return typeof c.phase === "number" }).phase=root.frame/32*Math.PI*2
+            prism.children.find(function(c) { return typeof c.phase === "number" }).phase=root.frame/32*Math.PI*2
+            signal.children.find(function(c) { return typeof c.phase === "number" }).phase=root.frame/32*Math.PI*2
             Qt.callLater(function() {
                 texturesWindow.contentItem.grabToImage(function(r) {
                     r.saveToFile(FRAMES + "/" + String(root.frame).padStart(2,"0") + ".png")
@@ -254,19 +212,17 @@ ShellRoot {
     frames_png = [Image.open(path).convert("RGB") for path in sorted(frames.glob("*.png"))]
     frames_png[0].save(ASSETS / "spoiler-preview.gif", save_all=True, append_images=frames_png[1:],
                        duration=438, loop=0, optimize=True)
-    for name in ("hiding-panel.png", "appearance-panel.png", "social-preview.png"):
+    for name in ("hiding-panel.png", "appearance-panel.png"):
         with Image.open(ASSETS / name) as image:
             assert image.mode in ("RGB", "RGBA")
             assert image.mode == "RGB" or image.getchannel("A").getextrema() == (255, 255)
             # Strip all ancillary metadata; only the synthetic rendered pixels ship.
             opaque = image.convert("RGB")
         opaque.save(ASSETS / name, optimize=True)
-    assert Image.open(ASSETS / "social-preview.png").size == (1280, 640)
-    assert (ASSETS / "social-preview.png").stat().st_size < 1024 * 1024
 
 # The QML process and its isolated fixture have both stopped before publishing
 # the final composition and its hashes.
 marketplace_cover()
 write_provenance()
 assert (ROOT / "preview.png").is_file()
-print("Rendered English QML panels, synthetic animation, 1280×640 social card and 1600×900 marketplace preview.")
+print("Rendered English QML panels, synthetic animation, minimal 1280×640 illustrated cover.")

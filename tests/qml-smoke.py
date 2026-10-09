@@ -19,11 +19,12 @@ args.add_argument("--locale", choices=("en", "ru"), default="en", help="exercise
 args.add_argument("--missing-core", action="store_true", help="verify setup guidance without an installed controller")
 args.add_argument("--lab", type=Path, help="use stock KeyboardPanel in a marked isolated Hyprland lab")
 args.add_argument("--customize", action="store_true", help="exercise customization, preserved draft and steady background polling")
+args.add_argument("--presets", action="store_true", help="apply every opaque preset through the real selector")
 args.add_argument("--native-config", action="store_true", help="exercise authoritative native values and queued Lua reload")
 args.add_argument("--status-failure", action="store_true", help="exercise malformed fresh status after a successful action")
 args.add_argument("--configure-failure", action="store_true", help="exercise refused Lua persistence without claiming an applied appearance")
 options = args.parse_args()
-if options.native_config:
+if options.native_config or options.presets:
     options.customize = True
 plugin = Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix="hyprveil-qml-") as temp:
@@ -57,7 +58,7 @@ Item {
     home = fixture / "home"
     commands = home / ".local/bin"
     commands.mkdir(parents=True)
-    (home / "mock-state.json").write_text(json.dumps({"mode": "black", "appearance": {"variant": "satin", "color": "#ffffff", "grain": 50, "speed": 100, "darkness": 50, "eye": True, "eye_size": 80}}))
+    (home / "mock-state.json").write_text(json.dumps({"mode": "black", "appearance": {"variant": "prism", "color": "#ffffff", "grain": 50, "speed": 100, "darkness": 50, "eye": True, "eye_size": 80, "icon": "eye", "icon_opacity": 75}}))
     controller = commands / "hyprveil"
     controller.write_text('''#!/usr/bin/python3
 import json, os, pathlib, sys
@@ -84,15 +85,15 @@ elif action == "configure":
         sys.exit(1)
     opts = dict(zip(sys.argv[2::2], sys.argv[3::2]))
     state["appearance"] = {"variant": opts["--variant"], "color": opts["--color"], "grain": int(opts["--grain"]),
-        "speed": int(opts["--speed"]), "darkness": int(opts["--darkness"]), "eye": opts["--eye"] == "on", "eye_size": int(opts["--eye-size"])}
+        "speed": int(opts["--speed"]), "darkness": int(opts["--darkness"]), "eye": opts["--eye"] == "on", "eye_size": int(opts["--eye-size"]), "icon": opts["--icon"], "icon_opacity": int(opts["--icon-opacity"])}
     (home / "mock-state.json").write_text(json.dumps(state))
     print(json.dumps({"mode": state["mode"], "appearance": state["appearance"]}))
 elif action == "reload-config":
     state["reloads"] = state.get("reloads", 0) + 1
     state["mode"] = "spoiler" if state["reloads"] == 1 else "black"
-    state["appearance"] = {"variant": "telegram" if state["reloads"] == 1 else "satin",
+    state["appearance"] = {"variant": "signal" if state["reloads"] == 1 else "prism",
         "color": "#e3d9ff" if state["reloads"] == 1 else "#adcfc8", "grain": 61 if state["reloads"] == 1 else 52,
-        "speed": 80, "darkness": 50, "eye": True, "eye_size": 80}
+        "speed": 80, "darkness": 50, "eye": True, "eye_size": 80, "icon": "eye", "icon_opacity": 75}
     (home / "mock-state.json").write_text(json.dumps(state))
     print(json.dumps({"mode": state["mode"], "appearance": state["appearance"]}))
 else:
@@ -117,7 +118,8 @@ ShellRoot {
         visible: true
         color: "#101315"
         Rectangle { anchors.fill: parent; color: "#101315" }
-        Plugin.Panel { id: panel; x: 20; y: 20; manageIpc: false; hostWidget: widget; language: widget.language }
+        Plugin.Panel { id: panel; x: 20; y: 20; manageIpc: false; hostWidget: widget; language: widget.language
+            controllerCommand: [Quickshell.env("HOME") + "/.local/bin/hyprveil"] }
     }
     property string expectedLanguage: "TEST_LOCALE"
     function hasText(item, expected) {
@@ -138,6 +140,26 @@ ShellRoot {
     property int closedAt: 0
     property var steadyCurrent: null
     property string steadyMessage: ""
+    property bool presetsChecked: false
+    property int presetIndex: 0
+    property int iconIndex: 0
+    property var icons: ["lock", "shield", "none", "eye"]
+    property var presets: ["prism", "signal", "aurora", "contour", "radar", "matte", "error404", "matrix", "anonymous", "glass"]
+    function presetItem(item, name) {
+        if (item.modelData === name && typeof item.pick === "function") return item
+        for (var i=0;i<item.children.length;i++) { var child=presetItem(item.children[i],name); if(child) return child }
+        return null
+    }
+    function iconItem(item, name) {
+        if (item.modelData === name && typeof item.clicked === "function") return item
+        for (var i=0;i<item.children.length;i++) { var child=iconItem(item.children[i],name); if(child) return child }
+        return null
+    }
+    function advancedEditor(item) {
+        if (typeof item.advanced === "boolean" && item.draft !== undefined) return item
+        for (var i=0;i<item.children.length;i++) { var child=advancedEditor(item.children[i]); if(child) return child }
+        return null
+    }
     Timer {
         interval: 100
         running: true
@@ -241,6 +263,7 @@ ShellRoot {
                 stage = 18
             } else if (stage === 18 && !panel.busy && !panel.querying) {
                 if (panel.appearanceDirty || panel.current.appearance.grain !== 66) throw new Error("newer queued draft was discarded")
+                if (PRESETS && !presetsChecked) { stage=50; return }
                 if (NATIVE_CONFIG) {
                     panel.editAppearance("grain", 73)
                     panel.editAppearance("speed", 0)
@@ -251,9 +274,39 @@ ShellRoot {
                     stage = 20
                     return
                 }
-                panel.editAppearance("variant", "telegram")
+                panel.editAppearance("variant", "signal")
                 panel.applyAppearance()
                 stage = 9
+            } else if (stage === 50 && !panel.busy && !panel.querying) {
+                var preset=presetItem(panel,presets[presetIndex])
+                if (!preset) throw new Error("preset selector missing")
+                preset.pick()
+                stage=51
+            } else if (stage === 51 && !panel.busy && !panel.querying) {
+                if (!panel.current.known || panel.current.mode!=="omit" || panel.current.appearance.variant!==presets[presetIndex] ||
+                    panel.current.appearance.grain!==66 || panel.current.appearance.color!=="#aabbcd" || panel.appearanceDirty)
+                    throw new Error("preset selection lost parameters or confirmation")
+                presetIndex++
+                if (presetIndex===presets.length) { advancedEditor(panel).advanced=true; stage=60 }
+                else stage=50
+            } else if (stage === 60 && !panel.busy && !panel.querying) {
+                var icon=iconItem(panel,icons[iconIndex])
+                if (!icon || !icon.visible) throw new Error("advanced icon selector missing")
+                icon.clicked()
+                if (panel.appearanceDraft.icon!==icons[iconIndex] || panel.appearanceDraft.eye!==(icons[iconIndex]!=="none"))
+                    throw new Error("icon visibility compatibility failed")
+                panel.editAppearance("eye_size",96)
+                panel.editAppearance("icon_opacity",42)
+                panel.applyAppearance()
+                stage=61
+            } else if (stage === 61 && !panel.busy && !panel.querying) {
+                if (!panel.current.known || panel.current.mode!=="omit" || panel.current.appearance.icon!==icons[iconIndex] ||
+                    panel.current.appearance.eye!==(icons[iconIndex]!=="none") || panel.current.appearance.eye_size!==96 ||
+                    panel.current.appearance.icon_opacity!==42 || panel.current.appearance.grain!==66 || panel.appearanceDirty)
+                    throw new Error("icon configuration lost parameters or fresh confirmation")
+                iconIndex++
+                if (iconIndex===icons.length) { advancedEditor(panel).advanced=false; presetsChecked=true; stage=18 }
+                else stage=60
             } else if (stage === 20 && !panel.busy && !panel.querying) {
                 if (!panel.current.known || panel.current.mode !== "spoiler" || panel.current.desiredMode !== "omit" ||
                     panel.current.appearance.color !== "#e3d9ff" || !panel.appearanceDirty || panel.appearanceDraft.grain !== 73 ||
@@ -269,11 +322,11 @@ ShellRoot {
                     panel.current.appearance.color !== "#adcfc8" || panel.appearanceDirty || panel.appearanceDraft.color !== "#adcfc8" ||
                     panel.appearanceDraft.grain !== 52 || panel.message !== panel.tr("lua_reloaded"))
                     throw new Error("clean draft did not follow confirmed native Lua settings")
-                panel.editAppearance("variant", "telegram")
+                panel.editAppearance("variant", "signal")
                 panel.applyAppearance()
                 stage = 9
             } else if (stage === 9 && !panel.busy && !panel.querying) {
-                if (panel.current.appearance.variant !== "telegram" || panel.current.appearance.color !== (NATIVE_CONFIG ? "#adcfc8" : "#aabbcd") || panel.current.appearance.grain !== (NATIVE_CONFIG ? 52 : 66))
+                if (panel.current.appearance.variant !== "signal" || panel.current.appearance.color !== (NATIVE_CONFIG ? "#adcfc8" : "#aabbcd") || panel.current.appearance.grain !== (NATIVE_CONFIG ? 52 : 66))
                     throw new Error("variant click lost preserved parameters")
                 panel.editAppearance("grain", 73)
                 panel.editAppearance("speed", 0)
@@ -316,11 +369,11 @@ ShellRoot {
                     Qt.quit()
                 }
             }
-            if (ticks > 150) throw new Error("controller did not complete")
+            if (ticks > 180) throw new Error("controller did not complete")
         }
     }
 }
-'''.replace("TEST_LOCALE", options.locale if options.language == "auto" else options.language).replace("LANGUAGE_OVERRIDE", options.language).replace("MISSING_CORE", "true" if options.missing_core else "false").replace("CUSTOM_PREVIEW_PATH", str(plugin / "artifacts" / ("preview-customization-" + options.locale + ".png"))).replace("PREVIEW_PATH", str(plugin / "artifacts" / ("preview-" + options.locale + ".png"))).replace("CUSTOMIZE", "true" if options.customize else "false").replace("NATIVE_CONFIG", "true" if options.native_config else "false").replace("USE_LAB", "true" if options.lab else "false").replace("EXPECT_FAILURE", "true" if options.status_failure else "false").replace("CONFIGURE_FAILURE", "true" if options.configure_failure else "false")
+'''.replace("TEST_LOCALE", options.locale if options.language == "auto" else options.language).replace("LANGUAGE_OVERRIDE", options.language).replace("MISSING_CORE", "true" if options.missing_core else "false").replace("CUSTOM_PREVIEW_PATH", str(plugin / "artifacts" / ("preview-customization-" + options.locale + ".png"))).replace("PREVIEW_PATH", str(plugin / "artifacts" / ("preview-" + options.locale + ".png"))).replace("CUSTOMIZE", "true" if options.customize else "false").replace("NATIVE_CONFIG", "true" if options.native_config else "false").replace("USE_LAB", "true" if options.lab else "false").replace("EXPECT_FAILURE", "true" if options.status_failure else "false").replace("CONFIGURE_FAILURE", "true" if options.configure_failure else "false").replace("PRESETS", "true" if options.presets else "false")
     if options.lab:
         start = qml.index("    Window {")
         end = qml.index("    property int stage:", start)
@@ -344,7 +397,8 @@ ShellRoot {
             function releasePopout(key) { if (activePopout === key) activePopout = null }
         }
         Item { id: anchor; width: 30; height: 34 }
-        Plugin.Panel { id: panel; bar: barModel; anchorItem: anchor; manageIpc: false; hostWidget: widget; language: widget.language }
+        Plugin.Panel { id: panel; bar: barModel; anchorItem: anchor; manageIpc: false; hostWidget: widget; language: widget.language
+            controllerCommand: [Quickshell.env("HOME") + "/.local/bin/hyprveil"] }
     }
 ''' + qml[end:]
     (fixture / "shell.qml").write_text(qml)
@@ -362,13 +416,17 @@ ShellRoot {
         environment.update(QT_QPA_PLATFORM="wayland", QT_QPA_PLATFORMTHEME="", QT_STYLE_OVERRIDE="Fusion",
                            HOME=str(home), PYTHONPATH="/fixture-injection", BASH_ENV="/fixture-injection")
     environment.update(LANG="ru_RU.UTF-8" if options.locale == "ru" else "en_US.UTF-8", LC_ALL="ru_RU.UTF-8" if options.locale == "ru" else "en_US.UTF-8")
-    output = subprocess.run(["/usr/bin/quickshell", "--no-color", "--path", str(fixture)],
-                            env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            text=True, timeout=20)
+    try:
+        output = subprocess.run(["/usr/bin/quickshell", "--no-color", "--path", str(fixture)],
+                                env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, timeout=25)
+    except subprocess.TimeoutExpired as error:
+        print((error.stdout or b"").decode() if isinstance(error.stdout, bytes) else error.stdout)
+        raise
     print(output.stdout)
     if output.returncode != 0 or "HYPRVEIL_QML_SMOKE_OK" not in output.stdout:
         raise SystemExit("QML did not load")
-    forbidden = ("failed to load", "TypeError", "ReferenceError", "Cannot assign", "Unable to assign", "is not a type", "Unexpected token")
+    forbidden = ("failed to load", "TypeError", "ReferenceError", "Cannot assign", "Unable to assign", "is not a type", "Unexpected token", "Cannot open: file:")
     if any(problem.lower() in output.stdout.lower() for problem in forbidden):
         raise SystemExit("QML reported an error")
     if options.missing_core:
@@ -381,13 +439,24 @@ ShellRoot {
         expected += ["omit", "status"]
     if options.customize:
         expected += ["status", "status", "configure", "status", "configure", "status"]
+        if options.presets:
+            expected += ["configure", "status"] * 14
         if options.native_config:
             expected += ["status", "reload-config", "status", "status", "reload-config", "status"]
         expected += ["configure", "status"]
     actions = [record["action"] for record in log]
     if options.configure_failure:
         expected = ["status", "configure", "status"]
-    if (not options.customize and (actions[:len(expected)] != expected or any(action != "status" for action in actions[len(expected):]))) or (options.customize and (actions[:len(expected)] != expected or any(action != "status" for action in actions[len(expected):]))):
+    if options.presets:
+        # Applying ten presets can cross a normal background poll deadline.
+        # Assert every mutation and its confirming status while allowing those
+        # legitimate extra read-only checks between selector interactions.
+        if [action for action in actions if action != "status"] != [action for action in expected if action != "status"]:
+            raise SystemExit("unexpected preset mutations: " + repr(log))
+        for index, action in enumerate(actions):
+            if action != "status" and (index + 1 == len(actions) or actions[index + 1] != "status"):
+                raise SystemExit("preset mutation lacked fresh confirmation: " + repr(log))
+    elif actions[:len(expected)] != expected or any(action != "status" for action in actions[len(expected):]):
         raise SystemExit("unexpected controller commands: " + repr(log))
     if not all(record["clean"] for record in log):
         raise SystemExit("unsafe inherited environment")

@@ -3,15 +3,15 @@
 **Capture privacy, directly from your bar.**
 
 Keep a window visible on your own screen while its compositor capture gets
-a soft animated spoiler, a black mask, or no window at all. One click controls
+an animated procedural mask, a black mask, or no window at all. One click controls
 the focused window; a small panel controls the look.
 
 <p align="center">
-  <img src="preview.png" alt="Hyprveil: native synthetic before-and-after capture beside the actual English appearance panel" width="100%">
+  <img src="preview.png" alt="Hyprveil: the same desktop locally and in a screen share, with only the private window masked" width="100%">
 </p>
 
-*Left: actual Hyprveil native capture of a synthetic notes fixture. Right:
-the real Omarchy panel rendered offscreen with synthetic state.*
+*Illustration of the privacy boundary. Actual native recordings and panel
+screenshots appear below.*
 
 <p align="center">
   <a href="https://github.com/OBJLAKO/omarchy-hyprveil/actions/workflows/tests.yml"><img src="https://github.com/OBJLAKO/omarchy-hyprveil/actions/workflows/tests.yml/badge.svg" alt="Unit tests"></a>
@@ -26,42 +26,40 @@ the real Omarchy panel rendered offscreen with synthetic state.*
 | [**omarchy-hyprveil**](https://github.com/OBJLAKO/omarchy-hyprveil) — this repository | The Omarchy bar widget, confirmed privacy indicator and appearance controls. |
 | [**hyprveil**](https://github.com/OBJLAKO/hyprveil) — required companion | The native Hyprland capture engine, CLI and Lua settings. Also works on plain Hyprland. |
 
-The widget uses the native core's public API. Install the core once, then
-manage capture privacy from Omarchy. You can star the
+The widget uses the native core's public API. Its first-click setup installs
+the pinned core with Hyprpm; the core can also be installed independently.
+You can star the
 [panel](https://github.com/OBJLAKO/omarchy-hyprveil) and
 [native core](https://github.com/OBJLAKO/hyprveil) to follow their independent releases.
 
 ## Install
 
-Requires an Omarchy shell with third-party bar plugins, **native Hyprveil
-0.4.0**, Python 3 and `hyprctl`. The native preview release is tested against
-**Hyprland 0.56.2** and requires the exact supported compositor ABI; its
-installer refuses incompatible builds.
+Requires an Omarchy shell with third-party bar plugins, Python 3, `hyprpm`
+and `hyprctl`. Setup installs **native Hyprveil 0.5.0**, which currently supports
+**Hyprland 0.56.2 with its reviewed dependency ABI**. Other ABIs are refused.
 
-First follow the native [build prerequisites](https://github.com/OBJLAKO/hyprveil/blob/main/docs/HOST-SETUP.md),
-then install the pinned companion source:
-
-```sh
-(
-  set -e
-  git clone https://github.com/OBJLAKO/hyprveil.git
-  cd hyprveil
-  git checkout --detach 5d5afa8f93dda5a7e54d6c544facbd1822a2a531
-  python3 tools/setup.py install
-)
-```
-
-For a first native installation, **log out and back in** to activate the
-guarded autoload. Confirm `~/.local/bin/hyprveil status` reports a loaded
-native plugin, then add the widget:
+Add the widget:
 
 ```sh
 omarchy plugin add https://github.com/OBJLAKO/omarchy-hyprveil.git --enable
 ```
 
-The Omarchy command installs the widget. Native compilation and activation
-are handled by the companion's setup. See the [panel guide](docs/GUIDE.md)
-for offline installation, configuration and troubleshooting.
+**Click the bar button to finish setup in a terminal.** The installer shows
+its changes and asks before building the pinned native release with Hyprpm.
+Build dependencies and headers may require `sudo`; a broader `hyprpm update`
+needs separate consent. Stop screen sharing while setting up or rebuilding.
+
+Setup adds backed-up, marked Lua startup and persistent settings, then activates
+only Hyprveil. It does not reload unrelated plugins. No separate CLI is needed.
+If native state cannot be confirmed, the click opens the panel for diagnostics
+instead of starting setup. Protection starts after native loading is confirmed.
+See the [setup steps, permissions and files](docs/GUIDE.md#installation).
+If setup reports **prepared** but **not active yet**, its files are kept for a
+new login; confirm native loading after logging back in before sharing.
+
+**Upgrading from the old native installer?** Complete the native
+[cold-login migration](https://github.com/OBJLAKO/hyprveil/blob/main/docs/HOST-SETUP.md#migrate-from-the-old-installer)
+first so that two loaders do not manage the same module.
 
 ### Update and remove
 
@@ -71,15 +69,18 @@ Update the widget through Omarchy:
 omarchy plugin update io.github.objlako.hyprveil
 ```
 
-Native core updates are separate; follow its reviewed installation instructions
-when the supported Hyprland version changes. To remove this widget:
+Updating the widget does not rebuild an already loaded native module. Follow
+the [native update procedure](docs/GUIDE.md#update-and-remove) when needed.
+To remove this widget:
 
 ```sh
 omarchy plugin remove io.github.objlako.hyprveil
 ```
 
-This removes the Omarchy integration. The native core and its privacy settings
-remain installed, so existing capture protection can continue independently.
+This removes the Omarchy integration. The native core, selective startup helper,
+settings and private backups remain, so capture protection can continue after
+login. Setup also installs `~/.local/share/omarchy-hyprveil/uninstall.sh` with
+the same conservative behavior.
 
 ### Coming from `sky.hyprveil`
 
@@ -98,7 +99,7 @@ installation, see the [migration guide](docs/GUIDE.md).
 
 | Style | Protected window in a compositor capture |
 | :--- | :--- |
-| **Spoiler** | Opaque procedural Satin or Telegram-style grain, with an optional crossed eye. |
+| **Spoiler** | Ten opaque procedural presets, with an optional privacy icon. |
 | **Black** | A plain opaque black mask. |
 | **Omit** | The window is excluded from capture. |
 
@@ -107,9 +108,11 @@ installation, see the [migration guide](docs/GUIDE.md).
 effective privacy, including inherited protection; a question mark marks
 unconfirmed state.
 
-Tune color, grain, speed, darkness and eye size. Drafts survive background
-checks. Settings use native Lua configuration, and the panel follows changes
-made outside it. The UI defaults to **English**, with **Russian** for a Russian
+Choose Prism, Signal, Aurora, Contour, Radar, Matte, 404, Matrix, Anonymous or Liquid Glass, then tune color, grain,
+speed and darkness. Advanced settings offer an eye, lock or shield with size and icon opacity controls. Matte stays still. Drafts survive background
+checks. The panel follows native settings changed outside it. Managed Lua settings
+persist; an independently installed core without managed Lua settings clearly
+marks session-only changes. The UI defaults to **English**, with **Russian** for a Russian
 system locale. [Controls and settings](docs/GUIDE.md#controls).
 
 To choose a language explicitly, use `en`, `ru` or `auto`:
@@ -119,11 +122,17 @@ omarchy bar set io.github.objlako.hyprveil language en
 ```
 
 <p align="center">
-  <img src="assets/spoiler-preview.gif" alt="Procedural QML previews of Satin and Telegram styles" width="960">
+  <img src="assets/appearance-panel.png" alt="English Hyprveil appearance controls with ten presets and advanced icon settings" width="760">
 </p>
 
-*Real QML previews with synthetic state. This loop demonstrates the panel's
-appearance preview, rather than recording native capture output.*
+*Actual QML panel rendered offscreen with synthetic state.*
+
+<p align="center">
+  <img src="assets/native-styles.gif" alt="Actual native GPU captures of all ten synthetic spoiler themes" width="960">
+</p>
+
+*Actual native GPU captures of ten themes in an isolated synthetic test session.
+No personal desktop or private window content is shown.*
 
 ## Capture scope
 
@@ -142,6 +151,7 @@ using the [native capture limits](https://github.com/OBJLAKO/hyprveil#know-the-b
 ```sh
 python3 -m unittest discover -s tests -v
 node tests/state.test.cjs
+python3 tests/qml-process-failures.py
 python3 tests/qml-smoke.py --native-config
 ```
 
@@ -153,9 +163,11 @@ Quickshell and Pillow:
 python3 assets/render-previews.py
 ```
 
-The renderer uses a temporary HOME, an artificial controller and Qt offscreen.
-The native before/after sample comes from a separate, stopped synthetic
-compositor lab. No personal desktop capture is used.
+The cover is an explanatory SVG illustration. Panel screenshots use a temporary
+HOME, an artificial controller and Qt offscreen. The native styles recording
+comes from a separate, stopped synthetic compositor lab. No personal desktop
+capture is used. Installer tests use temporary homes and fake manager commands;
+they do not claim a live privileged Hyprpm installation or a cold-login test.
 [Asset provenance](assets/provenance.json) · [Validation guide](docs/GUIDE.md#validation).
 
 </details>

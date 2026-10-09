@@ -1,32 +1,134 @@
 # Hyprveil panel guide
 
 This Omarchy widget controls [native Hyprveil](https://github.com/OBJLAKO/hyprveil)
-through its installed CLI and public Lua API. It requires the 0.4.0 native
+through its bundled controller and public Lua API. It requires the 0.5.0 native
 API; the core's tested Hyprland version is 0.56.2. The permanent Omarchy
 plugin ID is `io.github.objlako.hyprveil`.
 
 ## Installation
 
-Follow the [native core installation](https://github.com/OBJLAKO/hyprveil#quick-start)
-first and complete its first login to activate the installed core. The panel
-requires `~/.local/bin/hyprveil`; it cannot install native code for you.
-Then use Omarchy's standard plugin manager:
+Install the widget with Omarchy:
 
 ```sh
 omarchy plugin add https://github.com/OBJLAKO/omarchy-hyprveil.git --enable
 ```
 
-The repository has one root manifest, root QML entry point, README and MIT
-license. Omarchy clones and validates the root package directly. No postinstall
-script is needed or executed. The UI gives setup guidance when native state
-cannot be confirmed. It performs no automatic native installation or loading.
-With an installed but unloaded core, the Load button is an explicit user action.
+When native Hyprveil is confirmed unloaded, the first left or middle click
+opens `install.sh` in an Omarchy terminal. The Setup native button does the
+same. Review the printed changes and confirm there. Unknown native state opens
+the panel for diagnostics; it does not authorize setup. Omarchy's initial clone
+does not run an install hook. Stop screen sharing before setup or rebuilding.
 
-Update a Git-managed installation through Omarchy:
+The terminal installer follows the explicit first-click approach used by
+[Omarchy Liquid Glass](https://github.com/fasi96/omarchy-liquid-glass), with
+Hyprveil's own native source and selective activation. It requires a running
+Hyprland session, the reviewed **0.56.2 ABI**, a readable
+`~/.config/hypr/hyprland.lua` and no existing configuration errors.
+
+The [panel setup entry point](https://github.com/OBJLAKO/omarchy-hyprveil#install)
+documents this first-click workflow. The independent
+[native core](https://github.com/OBJLAKO/hyprveil)
+also works without this panel. The panel bundles its API controller and requires
+no separate `~/.local/bin/hyprveil` or old installation receipt.
+
+### What setup changes
+
+[`native-release.json`](../native-release.json) pins native version **0.5.0** to
+commit `f575f3b757d5b959f0d3e638cf6d98b5a1d0301a`. Setup fetches that exact clean
+commit into `~/.local/share/omarchy-hyprveil/native-<commit>` and asks Hyprpm to
+build and enable it. Hyprpm's native manifest selects the reviewed source commit
+for the supported compositor ABI. The panel does not compile or publish its own
+copy directly into the manager cache.
+
+Missing Arch build tools (`base-devel`, `cmake`, `meson`, `cpio`, `pkgconf`, `git`)
+may be installed through `sudo pacman -S --needed`. Hyprpm may also request
+privilege for headers/cache. If headers need updating, setup separately explains
+that **`hyprpm update` can rebuild every registered Hyprpm repository** and asks
+for consent. `--yes` alone does not grant that broader update.
+
+| Path | Purpose |
+| :--- | :--- |
+| `~/.config/hypr/hyprland.lua` | A marked `OMARCHY HYPRVEIL SETUP v1` block sources the bootstrap. |
+| `~/.config/hypr/hyprveil-hyprpm.lua` | Native plugin permission, managed settings and selective login activation. |
+| `~/.config/hypr/hyprveil-settings.lua` | Persistent mode and appearance; an existing valid managed block is preserved. |
+| `~/.local/share/omarchy-hyprveil/` | Pinned source and independent setup/controller/uninstall helpers. |
+| `~/.config/omarchy-hyprveil/install.json` | Private ownership record for setup's files and native registration. |
+| `~/.config/omarchy-hyprveil/backup-*` | Private backups of replaced user files. |
+
+Setup reloads Lua, reads configuration errors and loads only the enabled,
+successful `hyprveil.so` from Hyprpm's cache. It avoids `hyprpm reload`, which
+could unload unrelated manually loaded plugins. The login helper repeats this
+selective activation. Protection is confirmed through the native API before
+the UI reports success. Hyprland's plugin permission can require a new login.
+If the load command returns successfully but loading remains unconfirmed,
+setup exits nonzero with **“setup prepared”** and **“Protection is NOT active
+yet”**. It keeps the complete source, helpers, startup/settings and private
+receipt (`pending_login: true`). Log out and back in as instructed, then confirm
+native state before sharing. A pending request is not active protection.
+
+Existing native Hyprpm installations are reused rather than silently replaced.
+Edited setup blocks, unsafe files, multiple repositories providing Hyprveil
+and old native loaders are refused. A genuine failed load command or rejected
+configuration attempts to restore setup's unchanged files; concurrent edits
+are kept. If a concurrent main-config edit may retain the new source block,
+rollback keeps the complete helper/settings set and asks you to rerun setup.
+A completed native manager build can remain after a later failure. Read the
+terminal output before retrying.
+
+### Run setup directly
+
+From the installed widget checkout or a clean checkout of this repository:
+
+```sh
+./install.sh
+./install.sh --yes
+```
+
+`--yes` accepts the ordinary setup changes. Add `--hyprpm-update` only if you
+also authorize the broader manager update. `--core-source PATH` uses an owned,
+clean local checkout at exactly the pinned native commit; it does not allow
+an arbitrary native version. `--plugin-only` requests a native rebuild. It is
+allowed only while Hyprveil is unloaded and, for an existing registration,
+only when setup's ownership record matches. An externally installed core must
+be updated with its original Hyprpm workflow.
+
+### Cold-login migration from the old native installer
+
+Setup refuses `~/.config/hypr/hyprveil.lua` and recognized legacy autoload code
+before building. Follow the native
+[cold-login migration](https://github.com/OBJLAKO/hyprveil/blob/main/docs/HOST-SETUP.md#migrate-from-the-old-installer)
+to remove the old startup loader and end the old compositor session before
+using this setup. Do not install a second loader over a running legacy module.
+An older managed installation may retain explicit guarded Load/Enable recovery
+through its safely owned legacy CLI and receipt; that is a compatibility path.
+
+### Update and remove
+
+Update a Git-managed widget through Omarchy:
 
 ```sh
 omarchy plugin update io.github.objlako.hyprveil
 ```
+
+This updates the panel and release pin; it does not replace a loaded native
+module. For a setup-owned native rebuild, stop sharing, arrange an unloaded
+session without the automatic loader, and run `./install.sh --plugin-only`
+from the updated widget checkout. Setup refuses a rebuild if the module is
+loaded. Review the native guide before changing the supported compositor ABI.
+
+To remove the widget, use either:
+
+```sh
+omarchy plugin remove io.github.objlako.hyprveil
+~/.local/share/omarchy-hyprveil/uninstall.sh
+```
+
+Both retain native Hyprveil, its selective startup helper, settings, source,
+ownership record and backups. Existing and next-login protection can therefore
+continue without the widget. Complete native removal is a separate Hyprpm and
+Lua configuration operation: stop sharing first and remove only Hyprveil's own
+startup block and files after reviewing later edits. There is no `--purge` or
+`--native` removal flag.
 
 ### Migrate the old widget
 
@@ -45,18 +147,17 @@ bindings can remain in use. Standard plugin add does not take over old IDs.
 ### Optional offline or manual installer
 
 From a checked-out repository, `python3 tools/install.py` is an optional
-alternative for a fresh manual installation. For a legacy custom installation,
+alternative for copying the widget. It is separate from the first-click native
+setup. For a legacy custom widget installation,
 use the explicit migration:
 
 ```sh
 python3 tools/install.py --update
 ```
 
-The installer resolves only the owned `~/.local/bin/hyprveil` executable or
-the native installer's exact symlink to
-`~/.local/share/hyprveil/controller.py`. It never searches PATH or executes
-the controller during installation. It installs root runtime files into
-`~/.config/omarchy/plugins/io.github.objlako.hyprveil`.
+The installer copies the bundled API controller and root runtime files into
+`~/.config/omarchy/plugins/io.github.objlako.hyprveil`. It does not require or
+execute a separate CLI, search PATH, build native code or edit Hyprland settings.
 
 Existing files and `~/.config/omarchy/shell.json` receive private backups
 under `artifacts/shell-install-*` in the checkout. The printed report lists
@@ -111,42 +212,73 @@ Keyboard shortcuts for native Hyprveil are configured separately in Hyprland.
 
 | Panel label | Mode | Meaning |
 | :--- | :--- | :--- |
-| Spoiler / Спойлер | `spoiler` | An opaque procedural mask with satin or Telegram appearance. |
+| Spoiler / Спойлер | `spoiler` | An opaque procedural mask with ten appearance presets. |
 | Omit window / Полностью скрыть | `omit` | Exclude the protected window from compositor capture. |
 | Black mask / Обычная маска | `black` | A plain black mask. |
 | Restore omission / Вернуть исходное скрытие | `omit` | Return to omission while Hyprveil stays loaded. |
 
 Style changes preserve which windows are private. Your own desktop keeps
-its normal window contents. The panel can load the installed native plugin
-when it is not loaded; style controls stay disabled until state is confirmed.
+its normal window contents. Style controls stay disabled until native state is
+confirmed. Native builds belong to Hyprpm; the setup helper selectively
+activates its registered artifact as described above.
 
 ## Appearance and native settings
 
-The Appearance / Оформление tab exposes seven fields:
+The Appearance / Оформление tab exposes the pattern controls and an Advanced icon section:
 
 | Field | Range/default |
 | :--- | :--- |
-| Variant | Satin / Telegram; satin by default |
+| Variant | Prism / Signal / Aurora / Contour / Radar / Matte / 404 / Matrix / Anonymous / Liquid Glass; Prism by default |
 | Color | Opaque `#RRGGBB`; white by default |
 | Grain | 0–100%; default 50% |
-| Speed | 0–200%; default 100%; 0 pauses the pattern |
+| Speed | 0–200%; default 100%; 0 pauses the pattern; Matte is always still |
 | Darkness | 0–100%; default 50% |
-| Eye | On/off; on by default |
-| Eye size | 40–128 px; default 80 px |
+| Icon (Advanced) | Eye / Lock / Shield / None; Eye by default |
+| Icon size (Advanced) | 40–128 px; default 80 px |
+| Icon opacity (Advanced) | 0–100%; default 75%; affects only the icon |
 
-The preview is procedural and never samples client pixels. Color and
-darkness keep the mask opaque. Apply saves after a native acknowledgement
-and a fresh status check. Variant buttons apply immediately while keeping
+| Preset | Texture |
+| :--- | :--- |
+| Prism | Animated angular iridescent facets. |
+| Signal | Warm phosphor scanlines with a sweeping light band. |
+| Aurora | Broad cyan ribbons with a lavender echo. |
+| Contour | Organic terracotta topographic cells. |
+| Radar | A circular sonar sweep over a green grid. |
+| Matte | Still mineral grain; no animation timer. |
+| 404 | Giant error digits with occasional glitch slices. |
+| Matrix | Cascading green synthetic glyphs. |
+| Anonymous | An original illustrated mask with a moving scan glow. |
+| Liquid Glass | Floating glass lenses over a synthetic cyan/violet field. |
+
+Old `eye = false` settings still hide the icon. Choosing a shape enables it; choosing None hides it. Old `eye_size` remains the icon size. Native aliases `satin`, `telegram` and `grid` map to Prism, Signal and Radar. `404`, `cmatrix`, `anon`, `liquid-glass` and `liquidglass` are accepted aliases for the new themes.
+
+Preset swatches are actual native GPU captures of synthetic fixtures at fixed reference settings. The larger preview is a procedural illustration of your draft and never samples client pixels. Color and
+darkness keep the mask opaque. Apply requires a native acknowledgement and a fresh status check. With no
+managed Lua file it changes the current session, and the panel displays a
+permanent session-only note. Variant buttons apply immediately while keeping
 other parameters. Reset appearance restores defaults and keeps the hiding
 mode. When Black or Omit is selected, these parameters take effect after
 selecting Spoiler.
 
 The confirmed native mode and appearance determine the controls. Old
-installation preferences do not override actual native state. Settings are
-saved to the managed literal block in
-`~/.config/hypr/hyprveil-settings.lua`. Custom Lua belongs outside that block
-and is preserved. Custom code inside it or a later override can cause a
-GUI save to be refused; the panel keeps the draft and reports the result.
+installation preferences do not override actual native state.
+
+The first-click installer creates managed persistence. If you installed the
+native core independently, you can instead copy its
+[managed settings sample](https://github.com/OBJLAKO/hyprveil/blob/main/examples/hyprveil-settings.lua)
+to `~/.config/hypr/hyprveil-settings.lua` and integrate the
+[Hyprpm startup example](https://github.com/OBJLAKO/hyprveil/blob/main/examples/hyprveil-hyprpm.lua)
+into your Hyprland Lua configuration. Preserve any existing files and choose
+unused keybindings. The native guide explains the startup permissions.
+The runtime style editor changes only the managed settings block. Startup
+integration is a separate, explicitly confirmed terminal setup action.
+
+Once the managed literal block exists, panel saves update its settings and
+verify the native result after reload. Custom Lua belongs outside that block
+and is preserved. Custom code inside it, unsafe file permissions or a later
+override can cause a save to be refused; the panel keeps the draft and reports
+the failure. A missing managed file permits session-only changes; an unsafe
+existing file is refused before changing native state.
 
 **Reload Lua / Перечитать Lua** explicitly reloads configuration and confirms the native
 result. It preserves an unsaved draft; clean fields follow the new state.
@@ -161,15 +293,20 @@ support Tab, arrow adjustment and Home/End range boundaries.
 
 ## Safety boundary
 
-Commands use argument arrays, fixed executables and restricted environments.
+Runtime privacy commands use argument arrays, fixed executables and restricted
+environments. The terminal launcher uses one quoted repository path to run
+`install.sh`; the installer invokes its build and activation commands as arrays.
 The watcher emits five fields only: state, address, stable ID, native privacy
 and inherited privacy. Socket events are wakeups; titles are neither decoded
 nor retained. Stable IDs remain canonical decimal strings across the full
 positive uint64 range, without JavaScript number rounding.
 
 Unknown or malformed state cannot grant an action. A failed spoiler renderer
-uses a black replacement. Native ABI, release and session admission belong
-to the guarded core controller.
+uses a black replacement. The native module enforces the reviewed ABI before reading compositor fields;
+the controller independently attests process/socket identity. Hyprpm owns the
+native build/cache; selective activation checks the manager state and rejects
+unsafe cache artifacts. The bundled sources and hashes are recorded in
+`native-cli-provenance.json`. Legacy loading keeps its release admission checks.
 
 **Direct DRM/KMS scanout capture is not protected:** it bypasses the
 compositor's sanitized scene. Physical screens and cameras are also outside
@@ -183,8 +320,10 @@ From the repository root:
 ```sh
 python3 -m unittest discover -s tests -v
 node tests/state.test.cjs
+python3 tests/qml-process-failures.py
 python3 tests/qml-smoke.py --native-config --locale en
 python3 tests/qml-smoke.py --native-config --locale ru
+python3 tests/qml-smoke.py --presets --locale ru
 python3 tests/qml-smoke.py --missing-core --locale en
 python3 tests/qml-smoke.py --status-failure
 python3 tests/qml-smoke.py --configure-failure
@@ -192,12 +331,17 @@ python3 tests/preview-colors.py
 ```
 
 Python tests use temporary HOME directories and synthetic Unix sockets.
+First-click setup tests use fake Hyprpm/build/activation commands and temporary
+configuration/cache fixtures, including ownership and failure paths. They do
+not demonstrate a real privileged Hyprpm cache installation or a cold login.
 Portable package checks validate the root contract; a local integration test
 runs stock Omarchy add/validate/enable with fake git transport and shell IPC.
 That stock-source test is skipped when Omarchy is not installed.
 Node tests exercise the state model and execute Lua scenarios for identity,
 focus, inherited protection, response validation and idempotence. Local QML
-checks use an artificial controller; color checks require Pillow. The CI
+checks use an artificial controller; subprocess regression checks cover ignored
+SIGTERM, oversized output without line breaks and failed executable startup.
+Color checks require Pillow. The CI
 workflow runs the unit checks without claiming a compositor integration run.
 
 For a stock KeyboardPanel check, explicitly supply an already-running,

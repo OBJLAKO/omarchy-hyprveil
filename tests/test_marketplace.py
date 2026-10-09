@@ -22,7 +22,7 @@ class PackageTests(unittest.TestCase):
         manifest = json.loads((ROOT / "manifest.json").read_text())
         self.assertEqual(manifest["schemaVersion"], 1)
         self.assertEqual(manifest["id"], PLUGIN_ID)
-        self.assertEqual(manifest["version"], "1.5.0")
+        self.assertEqual(manifest["version"], "1.6.0")
         self.assertEqual(manifest["author"], "OBJLAKO")
         self.assertEqual(manifest["name"], "Hyprveil")
         self.assertEqual(manifest["kinds"], ["bar-widget"])
@@ -58,7 +58,7 @@ class PackageTests(unittest.TestCase):
         self.assertNotIn("language", privacy)
         self.assertIn('moduleName: "' + PLUGIN_ID + '"', (ROOT / "Panel.qml").read_text())
         self.assertIn('ipcTarget: "' + PLUGIN_ID + '"', (ROOT / "Panel.qml").read_text())
-        setup_url = "https://github.com/OBJLAKO/hyprveil#quick-start"
+        setup_url = "https://github.com/OBJLAKO/omarchy-hyprveil#install"
         self.assertIn('Qt.openUrlExternally("' + setup_url + '")', (ROOT / "Panel.qml").read_text())
         self.assertIn(setup_url, (ROOT / "docs/GUIDE.md").read_text())
 
@@ -77,7 +77,7 @@ class StockPluginAddTests(unittest.TestCase):
                 path = commands / name
                 path.write_text("#!/usr/bin/python3\n" + text)
                 path.chmod(0o700)
-            script("git", "import sys,shutil,pathlib\nassert sys.argv[1:3]==['clone','--']\ntarget=pathlib.Path(sys.argv[-1]);target.mkdir()\nsource=pathlib.Path(" + repr(str(ROOT)) + ")\nfor p in source.iterdir():\n if p.is_file() and p.suffix in ('.qml','.js') or p.name in ('manifest.json','privacy-watch','README.md','LICENSE'):\n  shutil.copyfile(p,target/p.name)\n(target/'.git').mkdir()\n")
+            script("git", "import sys,shutil,pathlib\nassert sys.argv[1:3]==['clone','--']\ntarget=pathlib.Path(sys.argv[-1]);target.mkdir()\nsource=pathlib.Path(" + repr(str(ROOT)) + ")\nfor p in source.iterdir():\n if p.is_file() and p.suffix in ('.qml','.js','.py') or p.name in ('manifest.json','native-release.json','native-cli-provenance.json','panel-controller','privacy-watch','install.sh','uninstall.sh','README.md','LICENSE'):\n  shutil.copyfile(p,target/p.name)\nshutil.copytree(source/'assets/presets',target/'assets/presets')\nshutil.copytree(source/'tools',target/'tools',ignore=shutil.ignore_patterns('__pycache__'))\n(target/'.git').mkdir()\n")
             script("omarchy-plugin-catalog", "import json,os,pathlib\nplugins=pathlib.Path(os.environ['HOME'])/'.config/omarchy/plugins'\nitems=[]\nfor p in plugins.glob('*/manifest.json'):\n if not p.parent.name.startswith('.'):\n  item=json.loads(p.read_text());item['manifestPath']=str(p);items.append(item)\nprint(json.dumps(items))\n")
             script("omarchy-plugin-list", "import subprocess\nprint(subprocess.check_output(['omarchy-plugin-catalog'],text=True))\n")
             script("omarchy-shell", "import json,sys,pathlib\nwith pathlib.Path(" + repr(str(log)) + ").open('a') as f:f.write(json.dumps(sys.argv[1:])+'\\n')\nprint('ok')\n")
@@ -93,7 +93,7 @@ class StockPluginAddTests(unittest.TestCase):
                                     env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=10)
             self.assertEqual(result.returncode, 0, result.stdout)
             target = home / ".config/omarchy/plugins" / PLUGIN_ID
-            for name in ("manifest.json", "BarWidget.qml", "Panel.qml", "I18n.js", "privacy-watch", "README.md", "LICENSE"):
+            for name in ("manifest.json", "BarWidget.qml", "Panel.qml", "I18n.js", "privacy-watch", "panel-controller", "native_cli.py", "native_service.py", "README.md", "LICENSE"):
                 self.assertEqual((target / name).read_bytes(), (ROOT / name).read_bytes())
             self.assertFalse((fixture / "unexpected-controller").exists())
             ipc = [json.loads(line) for line in log.read_text().splitlines()]

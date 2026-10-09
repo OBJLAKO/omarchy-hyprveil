@@ -1,0 +1,46 @@
+{
+  "source": "actual native GPU captures in an isolated marked synthetic compositor",
+  "native_sha256": "89bad8c991c61b78f6eeb0cbc31d92f71af7a856ef0b6098a9d592cc21ac06cb",
+  "lab_stopped": true,
+  "checks_passed": 724,
+  "settings": {
+    "variant": "prism",
+    "color": "#ffffff",
+    "grain": 50,
+    "speed": 100,
+    "darkness": 35,
+    "eye": false,
+    "eye_size": 80,
+    "icon": "eye",
+    "icon_opacity": 75
+  },
+  "processing": "crop-free resize from1000x640 to320x205; no synthesized mask pixels",
+  "outputs": {
+    "prism.png": "edaae96bf61b00677e883ff1a8df98330ebd9a30915573fc6d4bfe243042f2d6",
+    "signal.png": "6c393ca46d98a32d6ffb6fdbe4a7e66df24e5e51bce7090bd8d4ecf96795a6bf",
+    "aurora.png": "fc937f57b35f2bb3f112b5cd00a3df64acefb35aa5f6e4061b155d7949308d59",
+    "contour.png": "c21b1b7581d13bc0b17f1c7d14ebc4dad9718c71fd57c73ae97f862d564af08c",
+    "radar.png": "c0d76e5f085bd08c08e63bab64a5878b1f0cc3d9fa68639acd0d05020ba929d9",
+    "matte.png": "5bf2b439e531648c895d04b77cb7f5b8a4f8fc073e020903744d6e21b238c8d5",
+    "error404.png": "75e40a7f043bfa1a8cb5c0fb14961bd5616d017603659a65fab3bf18e7bf091e",
+    "matrix.png": "52e371b4afcef93d63ee1957b432eb996e32d467f388e2aa1a22f9151287c3b0",
+    "anonymous.png": "b0ef7d9bf26cea27f55c4213b8e8f617d1ee07423605252f019067c84f13efbe",
+    "glass.png": "ec3232b735ce685a6a214613fc950f0a421844275c2ea5f440f32b1ac71cff85"
+  },
+  "native_size": [
+    1000,
+    640
+  ],
+  "source_sha256": {
+    "prism.png": "7cedab18fd3977ded2a55e8e815674229aecb5822361f9663d07c51ad0a26ec3",
+    "signal.png": "3331d1d7b5651e0b38e10d81ccae33df872735964497c8cdba3a009dd25fc0d3",
+    "aurora.png": "c7ba99b3a056cc7754caf475150a6577dc2d6715f59b57f9523e6c8eeccfa204",
+    "contour.png": "cf04fec9b8c54ddeada80c7465843f5c86a6c40b6195628160014e4ae45908dd",
+    "radar.png": "315fdc378a3e7e73d26ee27034c8700cac52ec5b5b98191b4df36694d05ddf7a",
+    "matte.png": "6218667cad6266fc154985025a8d6fdd103c3edd422b84f57103d93279399ec6",
+    "error404.png": "34193798ece86cacc10f9a65551e40894947792f97db7df3c8aeaa4e858607c5",
+    "matrix.png": "0c4edf5d78e51a9cbad6ad08ced53a5316c51a4fff45a9f0798f1ba0ef0bc840",
+    "anonymous.png": "6838a6f8fa7305bd3d05b8abd04dd6c41f8e9db075b45ea6365c92555d6f0cde",
+    "glass.png": "79453dce95e794f615099096bad694af22e9492a54b822ee33ce9e8c59cee3ac"
+  }
+}

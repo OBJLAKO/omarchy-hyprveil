@@ -13,6 +13,7 @@ Column {
     property bool dirty: false
     property bool busy: false
     property bool animate: false
+    property bool advanced: false
     property string mode: "spoiler"
     property color foreground: Color.popups.text
     property string fontFamily: "Adwaita Sans"
@@ -24,7 +25,9 @@ Column {
     signal resetRequested()
     signal closeRequested()
     function syncColor() { hex.text = draft.color }
-    onDraftChanged: if (!hex.activeFocus) syncColor()
+    onDraftChanged: {
+        if (!hex.activeFocus) syncColor()
+    }
     Keys.onEscapePressed: closeRequested()
     spacing: Style.space(12)
 
@@ -64,19 +67,49 @@ Column {
         }
     }
     SpoilerPreview { width: parent.width; height: Style.space(118); appearance: root.draft; animate: root.animate; radius: Style.space(10) }
-    Row {
-        width: parent.width; spacing: Style.space(8)
-        Button {
-            width: (parent.width - parent.spacing) / 2
-            text: root.tr("satin"); selected: root.draft.variant === "satin"; bordered: true; focusable: true
-            enabled: !root.busy && root.colorValid; fontFamily: root.fontFamily; fontSize: Style.space(12)
-            onClicked: root.variantPicked("satin")
-        }
-        Button {
-            width: (parent.width - parent.spacing) / 2
-            text: "Telegram"; selected: root.draft.variant === "telegram"; bordered: true; focusable: true
-            enabled: !root.busy && root.colorValid; fontFamily: root.fontFamily; fontSize: Style.space(12)
-            onClicked: root.variantPicked("telegram")
+    Grid {
+        width: parent.width; columns: 5; spacing: Style.space(7)
+        Repeater {
+            model: Appearance.variants
+            delegate: Rectangle {
+                id: preset
+                required property string modelData
+                readonly property bool selected: root.draft.variant === modelData
+                width: (parent.width - parent.spacing * (parent.columns - 1)) / parent.columns
+                height: Style.space(68)
+                radius: Style.space(7)
+                color: "transparent"
+                border.width: selected || activeFocus ? 1 : 0
+                border.color: selected ? Color.accent : root.foreground
+                enabled: !root.busy && root.colorValid
+                opacity: enabled ? 1 : 0.45
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Button
+                Accessible.name: root.tr(modelData)
+                function pick() { root.variantPicked(modelData) }
+                Keys.onSpacePressed: pick()
+                Keys.onReturnPressed: pick()
+                Rectangle {
+                    x: Style.space(3); y: Style.space(3)
+                    width: parent.width - x * 2; height: Style.space(41)
+                    radius: Style.space(5); color: "#101315"; clip: true
+                    // Fixed reference swatches are actual native GPU captures.
+                    // The larger procedural preview follows this user's draft.
+                    Image {
+                        anchors.fill: parent
+                        source: Qt.resolvedUrl("assets/presets/" + preset.modelData + ".png")
+                        fillMode: Image.PreserveAspectCrop; smooth: true
+                    }
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.bottom; anchors.bottomMargin: Style.space(6)
+                    text: root.tr(preset.modelData); textFormat: Text.PlainText
+                    color: preset.selected ? root.foreground : Color.muted
+                    font.family: root.fontFamily; font.pixelSize: Style.space(10)
+                }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: preset.pick() }
+            }
         }
     }
     Row {
@@ -115,18 +148,44 @@ Column {
     Adjustment { caption: root.tr("grain"); value: root.draft.grain; onEdited: function(next) { root.edited("grain", next) } }
     Adjustment { caption: root.tr("speed"); value: root.draft.speed; maximum: 200; onEdited: function(next) { root.edited("speed", next) } }
     Adjustment { caption: root.tr("darkness"); value: root.draft.darkness; onEdited: function(next) { root.edited("darkness", next) } }
-    Row {
+    Button {
         width: parent.width
-        Text { width: parent.width - eyeToggle.implicitWidth; anchors.verticalCenter: parent.verticalCenter; text: root.tr("crossed_eye"); textFormat: Text.PlainText; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.space(12) }
-        ToggleSwitch {
-            id: eyeToggle
-            checked: root.draft.eye; rounded: true; trackHeight: Style.space(18); busy: root.busy
-            activeFocusOnTab: true
-            Keys.onSpacePressed: root.edited("eye", !root.draft.eye)
-            onToggled: root.edited("eye", !root.draft.eye)
+        text: root.tr("advanced") + (root.advanced ? " ▴" : " ▾")
+        focusable: true; fontFamily: root.fontFamily; fontSize: Style.space(11)
+        onClicked: root.advanced = !root.advanced
+    }
+    Column {
+        width: parent.width; spacing: Style.space(12); visible: root.advanced
+        Text { text: root.tr("privacy_icon"); textFormat: Text.PlainText; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.space(12) }
+        Row {
+            width: parent.width; spacing: Style.space(5)
+            Repeater {
+                model: Appearance.icons
+                delegate: Button {
+                    required property string modelData
+                    width: (parent.width - parent.spacing * 3) / 4
+                    text: root.tr("icon_" + modelData)
+                    selected: (root.draft.eye ? root.draft.icon : "none") === modelData
+                    bordered: true; focusable: true; enabled: !root.busy
+                    fontFamily: root.fontFamily; fontSize: Style.space(11)
+                    onClicked: {
+                        root.edited("icon", modelData)
+                        root.edited("eye", modelData !== "none")
+                    }
+                }
+            }
+        }
+        Adjustment {
+            caption: root.tr("icon_size"); value: root.draft.eye_size; minimum: 40; maximum: 128; suffix: " px"
+            enabled: root.draft.eye && root.draft.icon !== "none"
+            onEdited: function(next) { root.edited("eye_size", next) }
+        }
+        Adjustment {
+            caption: root.tr("icon_opacity"); value: root.draft.icon_opacity
+            enabled: root.draft.eye && root.draft.icon !== "none"
+            onEdited: function(next) { root.edited("icon_opacity", next) }
         }
     }
-    Adjustment { caption: root.tr("eye_size"); value: root.draft.eye_size; minimum: 40; maximum: 128; suffix: " px"; enabled: root.draft.eye; onEdited: function(next) { root.edited("eye_size", next) } }
     Row {
         width: parent.width; spacing: Style.space(8)
         Button {
@@ -146,8 +205,8 @@ Column {
     }
     Text {
         width: parent.width
-        text: root.mode === "spoiler" ? root.tr("spoiler_only")
-            : root.tr("spoiler_later")
+        text: (root.mode === "spoiler" ? root.tr("spoiler_only") : root.tr("spoiler_later"))
+            + ((root.draft.variant === "error404" || root.draft.variant === "anonymous") && root.draft.eye && root.draft.icon !== "none" ? "\n" + root.tr("art_icon_hint") : "")
         textFormat: Text.PlainText; color: Color.muted; font.family: root.fontFamily; font.pixelSize: Style.space(11); wrapMode: Text.WordWrap
     }
 }

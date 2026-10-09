@@ -1,27 +1,34 @@
+<!-- UPDATE REQUEST TEMPLATE, NOT A POSTED ISSUE.
+Title: [Verify]: Hyprveil
+Official form: https://github.com/omacom/omarchy-plugin-marketplace/issues/new?template=verify-plugin.yml
+Replace TARGET_PANEL_HEAD_40_HEX_AFTER_PUBLICATION with the published current
+HEAD of OBJLAKO/omarchy-hyprveil. Do not substitute the native core pin.
+The required acknowledgment below records the intended update request. The
+optional standard-installation acknowledgment remains unchecked: first-click
+terminal setup is still required and removal of manual-setup is not requested.
+Existing initial submission #10510 is closed and must not be duplicated.
+-->
+
+### Verification action
+
+Verify and publish a newer upstream commit
+
+### Plugin ID
+
+io.github.objlako.hyprveil
+
 ### Repository URL
 
 https://github.com/OBJLAKO/omarchy-hyprveil
 
-### Category
+### Target commit
 
-System
+TARGET_PANEL_HEAD_40_HEX_AFTER_PUBLICATION
 
-### Tags
+### Verification acknowledgment
 
-security, bar, hyprland
+- [x] I understand that only the exact target commit can become a verified marketplace snapshot and that verification is not a security audit.
 
-### Suggest a missing tag
+### Standard installation acknowledgment
 
-_No response_
-
-### Maintainer notes
-
-Hyprveil puts compositor capture privacy on the Omarchy bar: a confirmed eye indicator, one-click window privacy, and live Satin or Telegram spoiler controls alongside black masking and omission. This standalone Omarchy UI uses the permanent ID io.github.objlako.hyprveil; the required native engine lives at https://github.com/OBJLAKO/hyprveil and also supports plain Hyprland. Please mark the listing manual-setup: native Hyprveil 0.4.0 must be installed separately from the README's pinned source commit, against the exact supported compositor ABI (tested on Hyprland 0.56.2), and first installation activates at the next login. The widget then uses standard Omarchy plugin add/update/remove commands. Direct DRM/KMS capture is outside the compositor privacy boundary. Root preview.png combines the actual English QML panel with a labeled native capture of synthetic notes; no personal desktop content is included. MIT; English default and Russian locale support.
-
-### Submission checklist
-
-- [ ] The repository is public and contains installation and removal instructions.
-- [ ] I have documented the plugin license and any external dependencies.
-- [ ] I confirm that I own or have permission to submit this plugin and its preview assets.
-- [ ] The plugin does not overwrite user configuration without explicit consent.
-- [ ] I understand that approval is for listing and is not a security review.
+- [ ] I confirm that this listed root plugin supports the standard Omarchy installation path and does not require manual setup.

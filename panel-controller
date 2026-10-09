@@ -1,0 +1,72 @@
+#!/usr/bin/python3
+"""Control native Hyprveil; retain guarded loading for legacy installations."""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+import stat
+import sys
+
+import native_cli
+import native_service as service
+
+
+def legacy_controller(home):
+    receipt = home / ".config/hyprveil/config.json"
+    if not os.path.lexists(receipt):
+        return None
+    # A receipt selects legacy loading support only after owned-file admission.
+    service.manifest(json.loads(service.read_private(receipt)))
+    cli = home / ".local/bin/hyprveil"
+    if not os.path.lexists(cli):
+        return None
+    if cli.parent.resolve() != cli.parent:
+        raise service.Refused("legacy CLI directory must not contain symlinks")
+    directory = cli.parent.stat()
+    if directory.st_uid != os.getuid() or directory.st_mode & 0o022:
+        raise service.Refused("legacy CLI directory is not safely owned")
+    info = cli.lstat()
+    target = cli
+    if stat.S_ISLNK(info.st_mode):
+        target = home / ".local/share/hyprveil/controller.py"
+        if info.st_uid != os.getuid() or os.readlink(cli) != str(target):
+            raise service.Refused("legacy CLI is not the documented controller")
+    if target.parent.resolve() != target.parent:
+        raise service.Refused("legacy controller directory must not contain symlinks")
+    directory = target.parent.stat()
+    if directory.st_uid != os.getuid() or directory.st_mode & 0o022:
+        raise service.Refused("legacy controller directory is not safely owned")
+    info = target.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1 or info.st_mode & 0o022 or not info.st_mode & 0o111:
+        raise service.Refused("legacy controller must be an owned executable")
+    return cli
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    try:
+        if argv == ["status"]:
+            result = native_cli.Controller().run("status")
+            if not result["loaded"]:
+                try:
+                    result["load_supported"] = legacy_controller(Path.home()) is not None
+                except (OSError, ValueError, TypeError, service.Refused):
+                    # An old broken receipt must not obscure native Hyprpm
+                    # state or grant legacy loading. Explicit loading refuses.
+                    result["load_supported"] = False
+            print(json.dumps(result, ensure_ascii=False))
+            return 0
+        if len(argv) == 1 and argv[0] in ("start", "enable"):
+            controller = legacy_controller(Path.home())
+            if controller is None:
+                raise service.Refused("enable the native core with hyprpm enable hyprveil, then hyprpm reload")
+            os.execve(str(controller), [str(controller), *argv], dict(os.environ))
+        return native_cli.main(argv)
+    except (OSError, ValueError, TypeError, service.Refused) as error:
+        print(json.dumps({"error": str(error)}, ensure_ascii=False), file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -10,8 +10,19 @@ import files as install
 
 PLUGIN_ID = "io.github.objlako.hyprveil"
 LEGACY_IDS = ("sky.hyprveil", "sky.screen-privacy")
-RUNTIME_FILES = ("BarWidget.qml", "Panel.qml", "StyleRow.qml", "Eye.qml", "State.js", "I18n.js", "Privacy.js", "Appearance.js",
-                 "AppearanceEditor.qml", "SpoilerPreview.qml", "WindowPrivacy.qml", "privacy-watch", "README.md", "manifest.json")
+PRESET_FILES = tuple("assets/presets/" + variant + ".png" for variant in ("prism", "signal", "aurora", "contour", "radar", "matte", "error404", "matrix", "anonymous", "glass")) + ("assets/presets/provenance.json",)
+RUNTIME_FILES = ("BarWidget.qml", "Panel.qml", "StyleRow.qml", "Eye.qml", "PrivacyIcon.qml", "State.js", "I18n.js", "Privacy.js", "Appearance.js",
+                 "AppearanceEditor.qml", "SpoilerPreview.qml", "WindowPrivacy.qml", "privacy-watch", "panel-controller",
+                 "native_cli.py", "native_service.py", "native-cli-provenance.json", "install.sh", "uninstall.sh", "native-release.json", "tools/setup.py", "tools/files.py", *PRESET_FILES, "README.md", "manifest.json")
+
+def validate_runtime_parents(base, name):
+    parent = base
+    for part in Path(name).parts[:-1]:
+        parent /= part
+        if not os.path.lexists(parent):
+            break
+        os.close(install.directory(parent))
+
 
 def entry_id(item):
     return item.get("id") if isinstance(item, dict) else item if isinstance(item, str) else None
@@ -22,10 +33,10 @@ def main(argv=None):
     parser.add_argument("--update", action="store_true", help="replace owned plugin files after private backups")
     args = parser.parse_args(argv)
     home = Path.home()
-    controller = install.controller_path(home)
     source = Path(__file__).resolve().parents[1]
     plugins = home / ".config/omarchy/plugins"
     target = plugins / PLUGIN_ID
+    controller = target / "panel-controller"
     shell = home / ".config/omarchy/shell.json"
     before, mode = install.read_owned(shell, 1024 * 1024)
     config = json.loads(before)
@@ -44,6 +55,7 @@ def main(argv=None):
     if os.path.lexists(legacy_target):
         os.close(install.directory(legacy_target))
         for name in RUNTIME_FILES:
+            validate_runtime_parents(legacy_target, name)
             if os.path.lexists(legacy_target / name):
                 legacy_previous[name] = install.read_owned(legacy_target / name)[0]
     install.ensure(plugins)
@@ -53,6 +65,7 @@ def main(argv=None):
         if os.path.lexists(target / ".git"):
             raise RuntimeError("plugin is Git-managed; use: omarchy plugin update " + PLUGIN_ID)
         for name, contents in files.items():
+            validate_runtime_parents(target, name)
             if os.path.lexists(target / name):
                 previous[name] = install.read_owned(target / name)[0]
                 if previous[name] != contents and not args.update:
@@ -63,11 +76,13 @@ def main(argv=None):
     backup.chmod(0o700)
     install.atomic(backup / "shell.json", before, 0o600)
     for name, contents in previous.items():
+        install.ensure((backup / name).parent, private=True)
         install.atomic(backup / name, contents, 0o600)
     if legacy_previous:
         legacy_backup = backup / "legacy-sky.hyprveil"
         install.ensure(legacy_backup, private=True)
         for name, contents in legacy_previous.items():
+            install.ensure((legacy_backup / name).parent, private=True)
             install.atomic(legacy_backup / name, contents, 0o600)
     install.ensure(target)
     # Publish a new manifest only after its entry points exist.
@@ -76,7 +91,8 @@ def main(argv=None):
             raise RuntimeError("shell plugin changed during installation: " + name)
         if name not in previous and os.path.lexists(target / name):
             raise RuntimeError("new plugin file appeared during installation: " + name)
-        install.atomic(target / name, contents, 0o755 if name == "privacy-watch" else 0o644)
+        install.ensure((target / name).parent)
+        install.atomic(target / name, contents, 0o755 if name in ("privacy-watch", "panel-controller", "install.sh", "uninstall.sh") else 0o644)
     # Retain the existing new entry and its placement/settings when present.
     # Otherwise migrate the first legacy entry in place. Old directories and
     # helper files remain intact for existing keybindings.

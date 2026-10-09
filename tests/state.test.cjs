@@ -25,7 +25,18 @@ test('all live modes require attested status', () => {
 });
 test('native status is a known unloaded state', () => {
     assert.deepEqual(parse({enabled: true, loaded: false, desired_mode: 'black', status: null, appearance: defaults()}),
-        {known: true, loaded: false, enabled: true, mode: 'native', desiredMode: 'black', spoilerFallback: false, appearance: defaults()});
+        {known: true, loaded: false, enabled: true, loadSupported: true, persistenceSupported: true,
+            mode: 'native', desiredMode: 'black', spoilerFallback: false, appearance: defaults()});
+});
+test('Hyprpm ownership disables legacy load actions and exposes runtime-only settings', () => {
+    const native = parse({enabled: false, loaded: false, load_supported: false, persistence_supported: false,
+        desired_mode: 'black', status: null, appearance: defaults()});
+    assert.equal(native.known, true);
+    assert.equal(native.loadSupported, false);
+    assert.equal(native.persistenceSupported, false);
+    for (const action of ['start', 'enable']) assert.equal(model.allowed(action, native), false);
+    for (const key of ['load_supported', 'persistence_supported'])
+        for (const value of [null, 'true', 1, {}]) assert.equal(parse({...sample('spoiler'), [key]: value}).known, false);
 });
 test('spoiler allocation failure honestly reports safe black fallback', () => {
     const raw = sample('spoiler');
@@ -67,7 +78,7 @@ test('only allowlisted actions can be dispatched', () => {
 test('actual native mode and appearance win over stale saved manifest values', () => {
     const raw = sample('spoiler');
     raw.desired_mode = 'omit';
-    raw.appearance = {...defaults(), variant: 'telegram', grain: 65};
+    raw.appearance = {...defaults(), variant: 'signal', grain: 65};
     raw.status.appearance = raw.appearance;
     raw.saved_appearance = defaults();
     raw.config_file = '/path/not/displayed/hyprveil-settings.lua';
@@ -75,7 +86,7 @@ test('actual native mode and appearance win over stale saved manifest values', (
     assert.equal(state.known, true);
     assert.equal(state.mode, 'spoiler');
     assert.equal(state.desiredMode, 'omit');
-    assert.equal(state.appearance.variant, 'telegram');
+    assert.equal(state.appearance.variant, 'signal');
     assert.equal(state.appearance.grain, 65);
     assert.equal(JSON.stringify(state).includes('/path/'), false);
     assert.equal(model.allowed('reload-config;sh', state), false);
@@ -182,21 +193,40 @@ assert(ok==${actualId === target.stable_id} and called==${actualId === target.st
     }
 });
 test('appearance is exact, canonical, bounded and cannot carry opacity or commands', () => {
-    assert.equal(appearance.parse(defaults()).variant, 'satin');
-    for (const [key, low, high] of [['grain', 0, 100], ['speed', 0, 200], ['darkness', 0, 100], ['eye_size', 40, 128]]) {
+    assert.equal(appearance.parse(defaults()).variant, 'prism');
+    assert.equal(defaults().eye, true);
+    for (const [old, canonical] of [['satin', 'prism'], ['telegram', 'signal'], ['grid', 'radar'],
+        ['404', 'error404'], ['cmatrix', 'matrix'], ['anon', 'anonymous'], ['liquid-glass', 'glass'], ['liquidglass', 'glass']])
+        assert.equal(appearance.parse({...defaults(), variant: old}).variant, canonical);
+    for (const variant of ['prism', 'signal', 'aurora', 'contour', 'radar', 'matte', 'error404', 'matrix', 'anonymous', 'glass']) {
+        const changed = appearance.update({...defaults(), grain: 34}, 'variant', variant);
+        assert.equal(changed.variant, variant);
+        assert.equal(changed.grain, 34);
+        assert.equal(appearance.command(changed)[2], variant);
+        assert.equal(i18n.text(variant, 'en').length > 0, true);
+    }
+    for (const [key, low, high] of [['grain', 0, 100], ['speed', 0, 200], ['darkness', 0, 100], ['eye_size', 40, 128], ['icon_opacity', 0, 100]]) {
         for (const good of [low, high]) assert.equal(appearance.parse({...defaults(), [key]: good})[key], good);
         for (const bad of [low - 1, high + 1, 50.5, '50', true, null, NaN, Infinity])
             assert.equal(appearance.parse({...defaults(), [key]: bad}), null);
     }
-    for (const bad of [{...defaults(), opacity: 0.5}, {...defaults(), eye: 'false'}, {...defaults(), variant: 'satin;sh'},
+    for (const bad of [{...defaults(), opacity: 0.5}, {...defaults(), eye: 'false'}, {...defaults(), variant: 'prism;sh'}, {...defaults(), variant: ['satin']},
+        {...defaults(), icon: undefined, icon_opacity: undefined},
         {...defaults(), color: '#FFFFFF'}, {...defaults(), color: '#ffffff;sh'}, {...defaults(), color: '#fff'}])
         assert.equal(appearance.command(bad).length, 0);
+    for (const icon of ['eye', 'lock', 'shield', 'none'])
+        assert.equal(appearance.update(defaults(), 'icon', icon).icon, icon);
+    assert.equal(appearance.parse({...defaults(), icon: 'svg'}), null);
+    assert.equal(appearance.parse({...defaults(), icon_opacity: undefined}), null);
+    const legacy = {...defaults()}; delete legacy.icon; delete legacy.icon_opacity;
+    assert.equal(appearance.parse(legacy).icon, 'eye');
+    assert.equal(appearance.parse(legacy).icon_opacity, 75);
     assert.equal(appearance.update(defaults(), 'color', '#AABBCD').color, '#aabbcd');
     assert.equal(appearance.update(defaults(), '__proto__', {}), null);
-    const changed = appearance.update(defaults(), 'variant', 'telegram');
+    const changed = appearance.update(defaults(), 'variant', 'signal');
     assert.equal(changed.grain, 50); assert.equal(changed.speed, 100); assert.equal(changed.eye_size, 80);
-    assert.deepEqual(JSON.parse(JSON.stringify(appearance.command(changed))), ['configure', '--variant', 'telegram', '--color', '#ffffff',
-        '--grain', '50', '--speed', '100', '--darkness', '50', '--eye', 'on', '--eye-size', '80']);
+    assert.deepEqual(JSON.parse(JSON.stringify(appearance.command(changed))), ['configure', '--variant', 'signal', '--color', '#ffffff',
+        '--grain', '50', '--speed', '100', '--darkness', '50', '--eye', 'on', '--eye-size', '80', '--icon', 'eye', '--icon-opacity', '75']);
 });
 test('controller and native appearance must match before UI reports healthy status', () => {
     const raw = sample('spoiler');

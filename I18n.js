@@ -1,6 +1,24 @@
 .pragma library
 // Presentation only. No strings enter commands, status parsing or privacy checks.
 var strings = {
+    "setup_native": ["Set up / repair Hyprveil…", "Установить / восстановить Hyprveil…"],
+    "signal": ["Signal", "Сигнал"],
+    "aurora": ["Aurora", "Аврора"],
+    "contour": ["Contour", "Контуры"],
+    "radar": ["Radar", "Радар"],
+    "error404": ["404", "404"],
+    "matrix": ["Matrix", "Матрица"],
+    "anonymous": ["Anonymous", "Аноним"],
+    "glass": ["Liquid Glass", "Стекло"],
+    "matte": ["Matte", "Матовая"],
+    "hyprpm_enable_hint": [
+        "Click Set up to build the native core in a terminal. It shows changes and asks first.",
+        "Нажмите «Установить»: терминал покажет изменения и запросит подтверждение."
+    ],
+    "runtime_only": [
+        "These settings affect this session. Add native Lua settings to keep them after login.",
+        "Эти настройки действуют в текущем сеансе. Для сохранения после входа добавьте нативные настройки Lua."
+    ],
     "status_unconfirmed": [
         "Could not confirm state. Refresh to check again.",
         "Не удалось подтвердить состояние. Обновите проверку."
@@ -177,9 +195,9 @@ var strings = {
         "Apply ~/.config/hypr/hyprveil-settings.lua\nYour appearance draft is preserved.",
         "Применить изменения из ~/.config/hypr/hyprveil-settings.lua\nЧерновик оформления сохранится."
     ],
-    "satin": [
-        "Satin",
-        "Сатин"
+    "prism": [
+        "Prism",
+        "Призма"
     ],
     "grain": [
         "Grain",
@@ -193,6 +211,15 @@ var strings = {
         "Darkness",
         "Затемнение"
     ],
+    "art_icon_hint": ["This theme has a central motif. Advanced → None removes the overlay icon.", "В этой теме есть центральный рисунок. «Дополнительно» → «Без значка» убирает значок поверх него."],
+    "privacy_icon": ["Privacy icon", "Значок приватности"],
+    "icon_eye": ["Eye", "Глаз"],
+    "icon_lock": ["Lock", "Замок"],
+    "icon_shield": ["Shield", "Щит"],
+    "icon_none": ["None", "Без значка"],
+    "icon_size": ["Icon size", "Размер значка"],
+    "icon_opacity": ["Icon opacity", "Непрозрачность значка"],
+    "advanced": ["Advanced", "Дополнительно"],
     "crossed_eye": [
         "Crossed-out eye",
         "Перечёркнутый глаз"
@@ -326,8 +353,8 @@ var strings = {
         "Состояние не подтверждено"
     ],
     "prerequisite": [
-        "Requires native Hyprveil 0.4.0 and ~/.local/bin/hyprveil. Install the core and complete the first login, or check your existing setup.",
-        "Нужен нативный Hyprveil 0.4.0 и CLI ~/.local/bin/hyprveil. Установите ядро и выполните первый вход или проверьте текущую установку."
+        "Requires native Hyprveil 0.5.0. Install and enable the core with hyprpm, then reload its plugins.",
+        "Нужен нативный Hyprveil 0.5.0. Установите и включите ядро через hyprpm, затем перечитайте его плагины."
     ],
     "setup_guide": [
         "Native setup guide",

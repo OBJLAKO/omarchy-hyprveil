@@ -30,17 +30,19 @@ Canvas {
             return
         }
         c.beginPath()
-        c.moveTo(2.5, 12)
-        c.bezierCurveTo(7.25, 5.6, 16.75, 5.6, 21.5, 12)
-        c.bezierCurveTo(16.75, 18.4, 7.25, 18.4, 2.5, 12)
-        c.stroke()
+        c.moveTo(2, 12)
+        c.bezierCurveTo(4.6, 8.1, 8, 6, 12, 6)
+        c.bezierCurveTo(16, 6, 19.4, 8.1, 22, 12)
+        c.bezierCurveTo(19.4, 15.9, 16, 18, 12, 18)
+        c.bezierCurveTo(8, 18, 4.6, 15.9, 2, 12)
+        c.closePath(); c.stroke()
         c.beginPath()
-        c.arc(12, 12, 2.45, 0, Math.PI * 2)
+        c.arc(12, 12, 2.7, 0, Math.PI * 2)
         c.stroke()
         if (crossed) {
             c.beginPath()
-            c.moveTo(4, 4.5)
-            c.lineTo(20, 19.5)
+            c.moveTo(3.5, 3.5)
+            c.lineTo(20.5, 20.5)
             c.stroke()
         }
     }

@@ -1,0 +1,18 @@
+{
+  "project": "https://github.com/OBJLAKO/hyprveil",
+  "adaptation": "native_cli.py imports its bundled native_service module; implementation unchanged",
+  "files": {
+    "native_cli.py": {
+      "source": "tools/cli.py",
+      "source_sha256": "4341bc22102b157dd96144a036a56c8f59ade3323ef935eff46c4aee2d556389",
+      "bundled_sha256": "dc2340073c203a3791c5e93919a5ca51cce4f5c5b33bf854da15127bb000b86f"
+    },
+    "native_service.py": {
+      "source": "tools/service.py",
+      "source_sha256": "d206642192fdb7d826e289a8bfb1113e0efde68662964450c6250446a7351439",
+      "bundled_sha256": "d206642192fdb7d826e289a8bfb1113e0efde68662964450c6250446a7351439"
+    }
+  },
+  "source_revision": "f575f3b757d5b959f0d3e638cf6d98b5a1d0301a",
+  "version": "0.5.0"
+}

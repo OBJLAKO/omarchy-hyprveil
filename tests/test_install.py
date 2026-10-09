@@ -57,15 +57,15 @@ class InstallerTests(unittest.TestCase):
         written = []
         original = files.atomic
         def record(path, contents, mode):
-            if path.parent == self.target:
-                written.append(path.name)
+            if path.is_relative_to(self.target):
+                written.append(str(path.relative_to(self.target)))
             return original(path, contents, mode)
         with patch.object(files, "atomic", side_effect=record):
             report = self.run_install()
         self.assertTrue(report["installed"])
-        self.assertEqual(report["controller"], str(self.cli))
+        self.assertEqual(report["controller"], str(self.target / "panel-controller"))
         self.assertEqual(written[-1], "manifest.json")
-        self.assertEqual(len(written), 14)
+        self.assertEqual(len(written), len(installer.RUNTIME_FILES))
         self.assertEqual(stat.S_IMODE((self.target / "privacy-watch").stat().st_mode), 0o755)
         self.assertEqual(stat.S_IMODE((self.target / "Panel.qml").stat().st_mode), 0o644)
         current = json.loads(self.shell.read_bytes())
@@ -108,7 +108,7 @@ class InstallerTests(unittest.TestCase):
             backup = Path(report["backup"]).parent / "legacy-sky.hyprveil" / name
             self.assertEqual(backup.read_bytes(), contents)
             self.assertEqual(stat.S_IMODE(backup.stat().st_mode), 0o600)
-        self.assertEqual(json.loads((self.target / "manifest.json").read_text())["version"], "1.5.0")
+        self.assertEqual(json.loads((self.target / "manifest.json").read_text())["version"], "1.6.0")
 
     def test_existing_new_entry_wins_and_duplicate_owned_eyes_are_removed(self):
         self.initial["bar"]["layout"]["left"].append({"id": "sky.hyprveil"})
@@ -140,6 +140,28 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(panel.read_text(), "// local Git checkout edit\n")
             self.assertEqual(self.shell.read_bytes(), before)
             self.assertFalse((self.target / "manifest.json").exists())
+
+    def test_unsafe_preset_directory_is_refused_before_any_widget_write(self):
+        outside = self.home / "outside"
+        outside.mkdir()
+        self.target.mkdir()
+        for kind in ("symlink", "writable"):
+            assets = self.target / "assets"
+            if kind == "symlink":
+                assets.symlink_to(outside, target_is_directory=True)
+            else:
+                assets.mkdir(mode=0o777)
+                assets.chmod(0o777)
+            before = self.shell.read_bytes()
+            with self.assertRaises((OSError, files.Refused)):
+                self.run_install("--update")
+            self.assertEqual(self.shell.read_bytes(), before)
+            self.assertFalse((self.target / "Panel.qml").exists())
+            self.assertFalse((outside / "presets").exists())
+            if kind == "symlink":
+                assets.unlink()
+            else:
+                assets.rmdir()
 
     def test_unsafe_legacy_file_is_refused_before_new_install(self):
         legacy = self.plugins / "sky.hyprveil"
@@ -196,7 +218,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(files.controller_path(self.home), self.cli)
         self.assertTrue(self.run_install()["installed"])
 
-    def test_missing_unrelated_or_non_executable_dependency_refused_before_write(self):
+    def test_receipt_free_install_does_not_require_or_execute_a_legacy_cli(self):
         for kind in ("missing", "unrelated", "non-executable", "writable"):
             with self.subTest(kind=kind):
                 self.cli.unlink(missing_ok=True)
@@ -205,10 +227,11 @@ class InstallerTests(unittest.TestCase):
                 elif kind != "missing":
                     self.cli.write_text("#!/usr/bin/python3\n")
                     self.cli.chmod(0o644 if kind == "non-executable" else 0o777)
-                with self.assertRaises((OSError, files.Refused)):
-                    self.run_install()
-                self.assertFalse(self.target.exists())
-                self.assertEqual(self.shell.read_bytes(), files.encoded(self.initial))
+                report = self.run_install()
+                self.assertTrue(report["installed"])
+                self.assertTrue((self.target / "native_cli.py").is_file())
+                self.assertTrue((self.target / "native_service.py").is_file())
+                self.assertEqual(report["controller"], str(self.target / "panel-controller"))
 
     def test_links_fifo_and_group_writable_plugin_file_are_refused(self):
         self.run_install()

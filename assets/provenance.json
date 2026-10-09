@@ -6,41 +6,126 @@
     "controller": "status-only synthetic fixture",
     "theme": "explicit synthetic palette in temporary HOME",
     "personal_desktop_capture": false,
-    "native_rendering": false
+    "native_compositor_session": false,
+    "preset_swatches": "actual synthetic native captures; assets/presets/provenance.json"
   },
   "native_sample": {
     "source": "Hyprveil native capture of synthetic GTK notes in a marked isolated compositor",
-    "native_sha256": "6b4e8ce6a24f56678c96a118296e530c777dd249123f038bf8844a9d78678641",
+    "native_sha256": "89bad8c991c61b78f6eeb0cbc31d92f71af7a856ef0b6098a9d592cc21ac06cb",
     "lab_stopped": true,
     "upstream_repository": "https://github.com/OBJLAKO/hyprveil",
     "upstream_asset": "assets/demo/poster.png",
-    "sha256": "90d26f63344fcc0e2b5da3135fd49e35e3b9678dc00f20f0b382de5f52f46b2a"
+    "sha256": "6729773b98172779cf5aad9a8f73bbaa557c8add9e8ccd78255fbab5374e3a82"
   },
-  "composition": "crop-free scaling, labels and framing; no synthesized native window or mask pixels",
+  "cover": {
+    "kind": "explanatory illustration",
+    "desktop_capture": false,
+    "provenance": "assets/cover-provenance.json"
+  },
+  "composition": "QML screenshots are synthetic; native demo is an actual GPU capture; main cover is a labeled illustration",
   "outputs": {
     "preview.png": {
-      "sha256": "3ef17022a498fe831a5366ccfb50abd67af14f6f815a5fca5d1a48b67db7d059",
-      "bytes": 358050
+      "sha256": "f46eb09b6bbdad4c69504f258ac9dff2f7cbb2fa2273392f1b0e91aa597be7c9",
+      "bytes": 55015
     },
     "assets/hiding-panel.png": {
-      "sha256": "97bebdc89148d7d7a868e4e97727a0c264e8f310f78cffdeb834d8714922a3c3",
-      "bytes": 47609
+      "sha256": "6b402c83507cb20206791846262b3e4fd82aaa8f079961f189d7abbe619b1136",
+      "bytes": 42199
     },
     "assets/appearance-panel.png": {
-      "sha256": "35dfc043a5bb38f76286643dd69355ec114ff269a32f3cc226438fbcfbbc3d71",
-      "bytes": 56017
+      "sha256": "81b4e2d3c0e087b73d05c8e5afcf1d3f718e5c95eeb4f787d2bdaf50000d0841",
+      "bytes": 82847
     },
     "assets/social-preview.png": {
-      "sha256": "6f5fa7eacf47ee9708e9be24d4cb631ab2f553002054e6ee0becb38902d51856",
-      "bytes": 89419
+      "sha256": "f46eb09b6bbdad4c69504f258ac9dff2f7cbb2fa2273392f1b0e91aa597be7c9",
+      "bytes": 55015
     },
     "assets/spoiler-preview.gif": {
-      "sha256": "0b73beb9f275ced2baffec1ea7312bce3bd6d6aaf34a39b518b8029dabca2884",
-      "bytes": 877618
+      "sha256": "84f2e80708675fe0e516752edab54c7c55990fb613ad5cbcab33480f23cb8674",
+      "bytes": 1145822
     },
     "assets/native-demo.png": {
-      "sha256": "90d26f63344fcc0e2b5da3135fd49e35e3b9678dc00f20f0b382de5f52f46b2a",
-      "bytes": 218451
+      "sha256": "6729773b98172779cf5aad9a8f73bbaa557c8add9e8ccd78255fbab5374e3a82",
+      "bytes": 153338
+    },
+    "assets/presets/anonymous.png": {
+      "sha256": "b0ef7d9bf26cea27f55c4213b8e8f617d1ee07423605252f019067c84f13efbe",
+      "bytes": 43945
+    },
+    "assets/presets/aurora.png": {
+      "sha256": "fc937f57b35f2bb3f112b5cd00a3df64acefb35aa5f6e4061b155d7949308d59",
+      "bytes": 40927
+    },
+    "assets/presets/contour.png": {
+      "sha256": "c21b1b7581d13bc0b17f1c7d14ebc4dad9718c71fd57c73ae97f862d564af08c",
+      "bytes": 64176
+    },
+    "assets/presets/error404.png": {
+      "sha256": "75e40a7f043bfa1a8cb5c0fb14961bd5616d017603659a65fab3bf18e7bf091e",
+      "bytes": 45699
+    },
+    "assets/presets/glass.png": {
+      "sha256": "ec3232b735ce685a6a214613fc950f0a421844275c2ea5f440f32b1ac71cff85",
+      "bytes": 46524
+    },
+    "assets/presets/matrix.png": {
+      "sha256": "52e371b4afcef93d63ee1957b432eb996e32d467f388e2aa1a22f9151287c3b0",
+      "bytes": 63221
+    },
+    "assets/presets/matte.png": {
+      "sha256": "5bf2b439e531648c895d04b77cb7f5b8a4f8fc073e020903744d6e21b238c8d5",
+      "bytes": 42477
+    },
+    "assets/presets/prism.png": {
+      "sha256": "edaae96bf61b00677e883ff1a8df98330ebd9a30915573fc6d4bfe243042f2d6",
+      "bytes": 48569
+    },
+    "assets/presets/provenance.json": {
+      "sha256": "97e01a22726193830c0fe07fa25468982b20268f05d01850dc7408b647dd70b8",
+      "bytes": 2323
+    },
+    "assets/presets/radar.png": {
+      "sha256": "c0d76e5f085bd08c08e63bab64a5878b1f0cc3d9fa68639acd0d05020ba929d9",
+      "bytes": 50471
+    },
+    "assets/presets/signal.png": {
+      "sha256": "6c393ca46d98a32d6ffb6fdbe4a7e66df24e5e51bce7090bd8d4ecf96795a6bf",
+      "bytes": 47930
+    },
+    "assets/native-styles.gif": {
+      "sha256": "acbf65713a3dd16e60888d94cc13759607aa3815c98aa97de1da797a8b50d824",
+      "bytes": 2424590
     }
+  },
+  "native_styles": {
+    "source": "actual Hyprveil native GPU synthetic lab recordings",
+    "sha256": "acbf65713a3dd16e60888d94cc13759607aa3815c98aa97de1da797a8b50d824",
+    "native_sha256": "89bad8c991c61b78f6eeb0cbc31d92f71af7a856ef0b6098a9d592cc21ac06cb",
+    "frames": 54,
+    "fps": 6,
+    "variants": [
+      "prism",
+      "signal",
+      "aurora",
+      "contour",
+      "radar",
+      "matte",
+      "error404",
+      "matrix",
+      "anonymous",
+      "glass"
+    ],
+    "settings": {
+      "variant": "prism",
+      "color": "#ffffff",
+      "grain": 0,
+      "speed": 125,
+      "darkness": 35,
+      "eye": false,
+      "eye_size": 80,
+      "icon": "eye",
+      "icon_opacity": 75
+    },
+    "lab_stopped": true
   }
 }
