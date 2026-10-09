@@ -49,11 +49,16 @@ def foreground(fd, group):
         signal.pthread_sigmask(signal.SIG_SETMASK, previous)
 
 
-def command(argv, *, capture=False, cwd=None, timeout=1800, allowed=(0,)):
+def command(argv, *, capture=False, cwd=None, timeout=1800, allowed=(0,), compositor=True):
     """Bound output, own the whole process group and preserve interactive sudo."""
     env = {key: value for key, value in os.environ.items() if key in
            ("HOME", "USER", "LOGNAME", "XDG_RUNTIME_DIR", "HYPRLAND_INSTANCE_SIGNATURE", "WAYLAND_DISPLAY", "DISPLAY", "TERM", "COLORTERM")}
     env.update(PATH="/usr/bin:/bin", LANG="C.UTF-8", PYTHONNOUSERSITE="1")
+    if not compositor:
+        # Hyprpm enable writes manager state, then implicitly reconciles ALL
+        # loaded plugins. Without HIS its reviewed implementation stops before
+        # compositor IPC, leaving activation to our selective helper.
+        env.pop("HYPRLAND_INSTANCE_SIGNATURE", None)
     args = list(map(str, argv))
     print("+ " + " ".join(args), flush=True)
     process = subprocess.Popen(args, cwd=cwd, env=env, process_group=0,
@@ -320,7 +325,7 @@ class Setup:
             raise files.Refused("Hyprpm has not enabled a successful Hyprveil build")
         path = folder / "hyprveil.so"
         cache_read(path)  # manager publishes root-owned binaries; refuse links/writable files
-        # Never use hyprpm reload: it unloads unrelated manually loaded modules.
+        # Hyprpm reload AND ordinary enable reconcile unrelated modules.
         command(["hyprctl", "plugin", "load", path], timeout=30)
         state = self.state()
         if not state["loaded"]:
@@ -328,17 +333,53 @@ class Setup:
         native_cli.Controller().run("reload-config")
         return self.state()
 
+    def enable(self, source, revision):
+        # In the reviewed Hyprpm, successful state registration is followed by
+        # an intentional no-HIS sync refusal (exit 1). Accept that status only
+        # after independently proving the exact requested build is enabled.
+        print("Registering Hyprveil without global compositor synchronization.")
+        command(["hyprpm", "enable", "hyprveil"], compositor=False, allowed=(0, 1))
+        repositories = self.repositories()
+        if len(repositories) != 1:
+            raise files.Refused("Hyprpm did not register the requested Hyprveil build")
+        folder, data = repositories[0]
+        repository, plugin = data.get("repository", {}), data["hyprveil"]
+        if (not isinstance(repository, dict) or repository.get("name") != "hyprveil"
+                or repository.get("url") != str(source) or repository.get("rev") != revision
+                or not isinstance(plugin, dict) or plugin.get("filename") != "hyprveil.so"
+                or plugin.get("enabled") is not True or plugin.get("failed") is not False):
+            raise files.Refused("Hyprpm has not enabled the exact successful Hyprveil build")
+        cache_read(folder / "hyprveil.so")
+
+    def update_headers(self):
+        empty = not any(self.cache.glob("*/state.toml"))
+        # With no repositories there are no foreign builds whose failure
+        # could be hidden by the expected no-HIS sync refusal. For a nonempty
+        # manager, retain its exit status and the separately consented scope.
+        command(["hyprpm", "update"], compositor=not empty, allowed=(0, 1) if empty else (0,))
+        if empty:
+            if any(self.cache.glob("*/state.toml")):
+                raise files.Refused("Hyprpm repositories changed during header bootstrap; inspect its output before retrying")
+            data = tomllib.loads(cache_read(self.cache / "state.toml", 128 * 1024).decode())
+            state = data.get("state", {})
+            pc = cache_read(self.cache / "headersRoot/share/pkgconfig/hyprland.pc", 128 * 1024).decode()
+            header = cache_read(self.cache / "headersRoot/include/hyprland/src/version.h", 128 * 1024).decode()
+            if (not isinstance(state, dict) or state.get("hash") != service.TESTED_ABI
+                    or not re.search(r"(?m)^Version:\s*0\.56\.2\s*$", pc)
+                    or not re.search(r'^#define\s+GIT_COMMIT_HASH\s+"' + re.escape(service.TESTED_ABI.split("_", 1)[0]) + r'"\s*$', header, re.M)):
+                raise files.Refused("Hyprpm did not prepare the reviewed headers; inspect its output before retrying")
+
     def rebuild(self, pin, source, old, folder, need_headers):
         # Prove that the recovery source still exists before removing a build.
         self.source(dict(pin, revision=old["native_revision"]), old["native_source"])
         if self.state()["loaded"]:
             raise files.Refused("Hyprveil loaded during setup; kept its current build and protection")
         try:
-            command(["hyprpm", "remove", folder.name])
+            command(["hyprpm", "remove", folder.name], compositor=False)
             if need_headers:
-                command(["hyprpm", "update"])
+                self.update_headers()
             command(["hyprpm", "add", source, pin["revision"]])
-            command(["hyprpm", "enable", "hyprveil"])
+            self.enable(source, pin["revision"])
         except (Exception, KeyboardInterrupt) as failure:
             try:
                 # A failed enable can leave the new repository registered.
@@ -357,10 +398,10 @@ class Setup:
                             raise files.Refused("repository changed during rebuild; left it untouched")
                         if self.state()["loaded"]:
                             raise files.Refused("Hyprveil loaded during recovery; kept its protection")
-                        command(["hyprpm", "remove", current.name])
+                        command(["hyprpm", "remove", current.name], compositor=False)
                 if not preserved:
                     command(["hyprpm", "add", old["native_source"], old["native_revision"]])
-                    command(["hyprpm", "enable", "hyprveil"])
+                    self.enable(old["native_source"], old["native_revision"])
             except Exception as recovery:
                 raise files.Refused("rebuild failed and the previous Hyprpm registration could not be restored; "
                                     "native source/settings were kept. Inspect the terminal output and restore with "
@@ -396,18 +437,17 @@ class Setup:
         if not isinstance(headers.get("state", {}), dict):
             raise files.Refused("invalid Hyprpm global header state")
         need_headers = headers.get("state", {}).get("hash") != version["abiHash"]
-        if not need_headers:
-            try:
-                cache_read(self.cache / "headersRoot/share/pkgconfig/hyprland.pc", 128 * 1024)
-            except FileNotFoundError:
-                need_headers = True
-        print("\nHyprveil setup will:\n  - build the reviewed native plugin with hyprpm (build tools/headers may ask for sudo)\n  - add a marked startup block and persistent appearance settings\n  - keep private backups and install an independent uninstaller\n  - activate only Hyprveil; other loaded plugins are left alone\nStop screen sharing before setup or rebuild.\n")
+        # With a matching global ABI, `hyprpm add` prepares missing headers
+        # itself. A global update is needed only for an uninitialized/stale ABI.
+        print("\nHyprveil setup will:\n  - build the reviewed native plugin with hyprpm (build tools/headers may ask for sudo)\n  - add a marked startup block and persistent appearance settings\n  - keep private backups and install an independent uninstaller\n  - register and activate only Hyprveil in ordinary setup\nStop screen sharing before setup or rebuild.\n")
         if not args.yes and not ask("Set up Hyprveil?" if not args.plugin_only else "Rebuild Hyprveil?"):
             raise files.Refused("setup cancelled; nothing changed (use --yes for unattended setup)")
         if need_headers and (not existing or repair) and not args.hyprpm_update:
-            print("Hyprpm headers need updating. `hyprpm update` also rebuilds every other Hyprpm repository.")
+            print("Hyprpm headers need updating. With registered repositories, `hyprpm update` can rebuild all repositories, synchronize all loaded plugins and unload manually loaded modules.")
             if not ask("Allow hyprpm update?"):
                 raise files.Refused("headers need updating; use --hyprpm-update only after reviewing its scope")
+        elif need_headers and (not existing or repair):
+            print("Authorized broader Hyprpm update: registered repositories may rebuild; global synchronization can unload manually loaded modules.")
         if args.plugin_only and state["loaded"]:
             raise files.Refused("Hyprveil is already loaded; cold-log in before rebuilding, to keep current protection")
         files.ensure(self.conf)
@@ -421,7 +461,7 @@ class Setup:
                 command(["sudo", "pacman", "-S", "--needed", *missing])
             source = self.source(pin, args.core_source)
             if need_headers:
-                command(["hyprpm", "update"])
+                self.update_headers()
             command(["hyprpm", "add", source, pin["revision"]])
         elif repair:
             folder, metadata = existing[0]
@@ -430,7 +470,7 @@ class Setup:
         else:
             source = metadata.get("url", "")
         if not repair:
-            command(["hyprpm", "enable", "hyprveil"])
+            self.enable(source, pin["revision"] if not existing else metadata.get("rev", ""))
         try:
             payloads = {}
             for name in HELPERS:

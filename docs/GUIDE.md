@@ -42,9 +42,12 @@ copy directly into the manager cache.
 
 Missing Arch build tools (`base-devel`, `cmake`, `meson`, `cpio`, `pkgconf`, `git`)
 may be installed through `sudo pacman -S --needed`. Hyprpm may also request
-privilege for headers/cache. If headers need updating, setup separately explains
-that **`hyprpm update` can rebuild every registered Hyprpm repository** and asks
-for consent. `--yes` alone does not grant that broader update.
+privilege for headers/cache. If the manager's recorded ABI is stale or absent,
+setup separately explains that **`hyprpm update` can rebuild all registered
+repositories, synchronize loaded plugins and unload manually loaded modules**,
+then asks for consent. `--yes` alone does not grant that broader update. If the
+recorded ABI already matches, missing headers are prepared by `hyprpm add`
+without forcing a global update.
 
 | Path | Purpose |
 | :--- | :--- |
@@ -55,10 +58,15 @@ for consent. `--yes` alone does not grant that broader update.
 | `~/.config/omarchy-hyprveil/install.json` | Private ownership record for setup's files and native registration. |
 | `~/.config/omarchy-hyprveil/backup-*` | Private backups of replaced user files. |
 
-Setup reloads Lua, reads configuration errors and loads only the enabled,
-successful `hyprveil.so` from Hyprpm's cache. It avoids `hyprpm reload`, which
-could unload unrelated manually loaded plugins. The login helper repeats this
-selective activation. Protection is confirmed through the native API before
+Ordinary setup registers Hyprveil with Hyprpm without letting that command
+synchronize the compositor globally. It verifies the requested repository,
+revision, enabled state and safe successful binary, reloads Lua, checks
+configuration errors and selectively loads `hyprveil.so` from the cache.
+It avoids `hyprpm reload`. An explicitly authorized broader manager update
+has the additional scope described above. With no registered repositories,
+initial header preparation also runs without compositor synchronization and
+must pass checks for the reviewed ABI and header version. The login helper
+repeats selective activation. Protection is confirmed through the native API before
 the UI reports success. Hyprland's plugin permission can require a new login.
 If the load command returns successfully but loading remains unconfirmed,
 setup exits nonzero with **“setup prepared”** and **“Protection is NOT active

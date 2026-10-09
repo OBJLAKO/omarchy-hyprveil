@@ -22,7 +22,7 @@ class PackageTests(unittest.TestCase):
         manifest = json.loads((ROOT / "manifest.json").read_text())
         self.assertEqual(manifest["schemaVersion"], 1)
         self.assertEqual(manifest["id"], PLUGIN_ID)
-        self.assertEqual(manifest["version"], "1.6.0")
+        self.assertEqual(manifest["version"], "1.6.1")
         self.assertEqual(manifest["author"], "OBJLAKO")
         self.assertEqual(manifest["name"], "Hyprveil")
         self.assertEqual(manifest["kinds"], ["bar-widget"])

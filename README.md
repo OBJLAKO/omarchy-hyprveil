@@ -46,11 +46,13 @@ omarchy plugin add https://github.com/OBJLAKO/omarchy-hyprveil.git --enable
 
 **Click the bar button to finish setup in a terminal.** The installer shows
 its changes and asks before building the pinned native release with Hyprpm.
-Build dependencies and headers may require `sudo`; a broader `hyprpm update`
-needs separate consent. Stop screen sharing while setting up or rebuilding.
+Build dependencies and headers may require `sudo`. A broader `hyprpm update`
+needs separate consent: it can rebuild other repositories and unload manually
+loaded plugins while synchronizing the compositor. Stop screen sharing while
+setting up or rebuilding.
 
-Setup adds backed-up, marked Lua startup and persistent settings, then activates
-only Hyprveil. It does not reload unrelated plugins. No separate CLI is needed.
+Ordinary setup adds backed-up, marked Lua startup and persistent settings, then
+registers and activates only Hyprveil. No separate CLI is needed.
 If native state cannot be confirmed, the click opens the panel for diagnostics
 instead of starting setup. Protection starts after native loading is confirmed.
 See the [setup steps, permissions and files](docs/GUIDE.md#installation).

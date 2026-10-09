@@ -30,8 +30,11 @@ not request its removal.
 (`f575f3b757d5b959f0d3e638cf6d98b5a1d0301a`, version 0.5.0), verifies a clean
 checkout and delegates build/cache registration to Hyprpm. Missing Arch build
 tools can require `sudo pacman`; Hyprpm headers/cache can also require privilege.
-Header updates get separate consent because `hyprpm update` may rebuild other
-repositories. `--yes` alone does not authorize that broader update.
+Header updates get separate consent because `hyprpm update` may rebuild all
+registered repositories, globally synchronize loaded plugins and unload
+manually loaded modules. `--yes` alone does not authorize that broader update.
+A matching recorded ABI lets `hyprpm add` prepare missing headers without
+forcing a global update.
 
 Confirmed setup writes a marked Lua source block, a selective login helper and
 managed persistent settings. It keeps private backups and an ownership record
@@ -46,8 +49,19 @@ nonzero and explicitly reports that protection is not active until confirmed
 after login. A failed load command or rejected configuration follows rollback.
 
 Activation reads Hyprpm state and checks its root/user-owned, nonwritable,
-single-link cache artifact before loading only `hyprveil.so`. Setup avoids a
-global `hyprpm reload`. Rebuilds require an unloaded module and matching setup
+single-link cache artifact before loading only `hyprveil.so`. Ordinary enable
+and own-repository removal omit `HYPRLAND_INSTANCE_SIGNATURE` only from the
+child environment to prevent Hyprpm's implicit global synchronization. The
+reviewed manager can return 1 after registering enable state; setup accepts
+0/1 only after checking the exact repository URL/revision, enabled successful
+build and safe artifact. It does not interpret exit 1 alone as success.
+
+With an empty manager, header bootstrap also omits compositor identity and
+accepts 0/1 only if no repositories appear and the resulting global ABI,
+pkg-config version and `version.h` commit match the reviewed build. An update
+with existing repositories retains ordinary manager failure handling and its
+separately consented global scope. Setup avoids an explicit `hyprpm reload`.
+Rebuilds require an unloaded module and matching setup
 ownership for an existing registration. An external registration is reused
 without replacement and retains its original update workflow. The conservative
 uninstaller removes only the Omarchy widget: native source, registration,

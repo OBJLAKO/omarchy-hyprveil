@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 spec = importlib.util.spec_from_file_location("reviewed_setup", ROOT / "tools/setup.py")
 setup = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(setup)
+REAL_COMMAND = setup.command
 
 
 class SetupFailureTests(unittest.TestCase):
@@ -40,6 +41,9 @@ class SetupFailureTests(unittest.TestCase):
         header = self.instance.cache / "headersRoot/share/pkgconfig/hyprland.pc"
         header.parent.mkdir(parents=True)
         header.write_text("Name: Hyprland\nVersion: 0.56.2\n")
+        version_header = self.instance.cache / "headersRoot/include/hyprland/src/version.h"
+        version_header.parent.mkdir(parents=True)
+        version_header.write_text('#define GIT_COMMIT_HASH "' + setup.service.TESTED_ABI.split('_', 1)[0] + '"\n')
         self.core = self.home / "reviewed core"
         self.core.mkdir()
         # Actual published release manifest includes an ancestor commit pin.
@@ -48,6 +52,7 @@ class SetupFailureTests(unittest.TestCase):
         self.pin = {"repository": setup.REPOSITORY, "revision": "a" * 40, "version": "0.5.0"}
         self.args = argparse.Namespace(yes=True, plugin_only=False, hyprpm_update=False, core_source=self.core)
         self.calls = []
+        self.command_options = []
         self.loaded = False
         self.fail = None
         self.on_command = None
@@ -76,6 +81,7 @@ class SetupFailureTests(unittest.TestCase):
     def command(self, argv, **kwargs):
         argv = tuple(map(str, argv))
         self.calls.append(argv)
+        self.command_options.append((argv, dict(kwargs)))
         if self.on_command:
             self.on_command(argv)
         if self.fail and argv[:len(self.fail)] == self.fail:
@@ -91,6 +97,10 @@ class SetupFailureTests(unittest.TestCase):
                 return self.dirty
             return ""
         if argv[:2] == ("hyprpm", "add"):
+            # Pinned main.cpp calls updateHeaders(false) itself after its
+            # full ABI hash gate, repairing a missing pc without global sync.
+            header = self.instance.cache / "headersRoot/share/pkgconfig/hyprland.pc"
+            header.write_text("Name: Hyprland\nVersion: 0.56.2\n")
             folder = self.instance.cache / "hyprveil"
             folder.mkdir(exist_ok=True)
             (folder / "state.toml").write_text("[repository]\nname = 'hyprveil'\nurl = " + repr(argv[2]) + "\nrev = '" + argv[3] + "'\n[hyprveil]\nfilename = 'hyprveil.so'\nenabled = false\nfailed = false\n")
@@ -100,6 +110,8 @@ class SetupFailureTests(unittest.TestCase):
             path.write_text(path.read_text().replace("enabled = false", "enabled = true"))
         elif argv == ("hyprpm", "remove", "hyprveil"):
             shutil.rmtree(self.instance.cache / "hyprveil")
+        elif argv == ("hyprpm", "update"):
+            (self.instance.cache / "state.toml").write_text("[state]\nhash='" + setup.service.TESTED_ABI + "'\n")
         elif argv[:3] == ("hyprctl", "plugin", "load"):
             self.loaded = self.admit_load
         return ""
@@ -166,6 +178,50 @@ class SetupFailureTests(unittest.TestCase):
         self.install()
         self.assertEqual(self.manager_calls()[0], ("hyprpm", "update"))
         self.assertEqual(self.manager_calls().count(("hyprpm", "update")), 1)
+        options = [options for argv, options in self.command_options if argv == ("hyprpm", "update")]
+        self.assertEqual(options, [{"compositor": False, "allowed": (0, 1)}])
+
+    def test_empty_header_bootstrap_refuses_failed_or_changed_postconditions(self):
+        pc = self.instance.cache / "headersRoot/share/pkgconfig/hyprland.pc"
+        header = self.instance.cache / "headersRoot/include/hyprland/src/version.h"
+        foreign = self.instance.cache / "other/state.toml"
+        original_header = header.read_text()
+        for corruption in ("global-abi", "pc-version", "source-hash", "new-repository"):
+            with self.subTest(corruption=corruption):
+                (self.instance.cache / "state.toml").write_text("[state]\nhash='stale'\n")
+                pc.write_text("Name: Hyprland\nVersion: 0.56.2\n")
+                header.write_text(original_header)
+                foreign.unlink(missing_ok=True)
+                def incomplete_update(argv, **kwargs):
+                    value = self.command(argv, **kwargs)
+                    if tuple(argv) == ("hyprpm", "update"):
+                        if corruption == "global-abi":
+                            (self.instance.cache / "state.toml").write_text("[state]\nhash='still-stale'\n")
+                        elif corruption == "pc-version":
+                            pc.write_text("Version: 0.56.1\n")
+                        elif corruption == "source-hash":
+                            header.write_text('#define GIT_COMMIT_HASH "' + "b" * 40 + '"\n')
+                        else:
+                            foreign.parent.mkdir(exist_ok=True)
+                            foreign.write_text("[repository]\nname='other'\n[other]\nenabled=true\nfailed=false\n")
+                    return value
+                with patch.object(setup, "command", side_effect=incomplete_update), self.assertRaises(setup.files.Refused):
+                    self.instance.update_headers()
+                self.assert_no_published_setup()
+
+    def test_nonempty_foreign_manager_store_never_masks_global_update_failure(self):
+        foreign = self.instance.cache / "other/state.toml"
+        foreign.parent.mkdir()
+        foreign.write_text("[repository]\nname='other'\n[other]\nenabled=true\nfailed=false\n")
+        # This foreign provider is intentionally excluded from repositories(),
+        # but it must still choose the ordinary, consented manager path.
+        self.assertEqual(self.instance.repositories(), [])
+        self.instance.update_headers()
+        options = [options for argv, options in self.command_options if argv == ("hyprpm", "update")]
+        self.assertEqual(options, [{"compositor": True, "allowed": (0,)}])
+        self.fail = ("hyprpm", "update")
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.instance.update_headers()
 
     def test_build_enable_and_load_failures_do_not_publish_config_or_receipt(self):
         for failed in (("hyprpm", "add"), ("hyprpm", "enable"), ("hyprctl", "plugin", "load")):
@@ -286,6 +342,28 @@ class SetupFailureTests(unittest.TestCase):
         self.assertEqual(self.manager_calls(), [("hyprpm", "remove", "hyprveil"),
                           ("hyprpm", "add", str(self.core), self.pin["revision"]), ("hyprpm", "enable", "hyprveil")])
         self.assertTrue(self.loaded)
+
+    def test_fresh_repair_and_recovery_enable_never_synchronize_the_compositor(self):
+        self.install()
+        self.loaded = False
+        self.install()
+        self.loaded = False
+        fired = False
+        def fail_new_add_once(argv):
+            nonlocal fired
+            if argv[:2] == ("hyprpm", "add") and not fired:
+                fired = True
+                raise subprocess.CalledProcessError(2, argv)
+        self.on_command = fail_new_add_once
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.install()
+        enables = [options for argv, options in self.command_options if argv == ("hyprpm", "enable", "hyprveil")]
+        self.assertEqual(len(enables), 3, "fresh setup, repair and recovery must all use the guarded enable path")
+        self.assertTrue(all(options.get("compositor") is False for options in enables))
+        self.assertTrue(all(options.get("allowed") == (0, 1) for options in enables))
+        removals = [options for argv, options in self.command_options if argv[:2] == ("hyprpm", "remove")]
+        self.assertTrue(removals)
+        self.assertTrue(all(options.get("compositor") is False for options in removals))
 
     def test_external_core_is_never_removed_by_default_or_explicit_repair(self):
         self.command(("hyprpm", "add", str(self.core), self.pin["revision"]))
@@ -443,14 +521,12 @@ class SetupFailureTests(unittest.TestCase):
                                 capture_output=True, check=True, timeout=5)
         self.assertEqual(shlex.split(result.stdout), ["/usr/bin/python3", str(self.instance.dest / "setup.py"), "--load-only"])
 
-    def test_matching_header_hash_without_pc_requires_explicit_header_recovery(self):
+    def test_matching_header_hash_without_pc_is_repaired_by_add_without_global_update(self):
         (self.instance.cache / "headersRoot/share/pkgconfig/hyprland.pc").unlink()
-        with self.assertRaisesRegex(setup.files.Refused, "headers"):
-            self.install()
-        self.assertFalse(self.manager_calls())
-        self.args.hyprpm_update = True
         self.install()
-        self.assertEqual(self.manager_calls()[0], ("hyprpm", "update"))
+        self.assertFalse(any(call == ("hyprpm", "update") for call in self.calls))
+        self.assertEqual(self.manager_calls()[0][:2], ("hyprpm", "add"))
+        self.assertTrue((self.instance.cache / "headersRoot/share/pkgconfig/hyprland.pc").exists())
 
     def test_adopted_external_url_and_revision_are_preserved_without_ownership(self):
         self.command(("hyprpm", "add", "https://example.invalid/foreign-core", "stable"))
@@ -502,6 +578,77 @@ class SetupFailureTests(unittest.TestCase):
                 setup.fcntl.flock(held, setup.fcntl.LOCK_EX | setup.fcntl.LOCK_NB)
                 self.assertEqual(setup.main(["--load-only"]), 1)
                 activate.assert_not_called()
+
+
+class HyprpmEnableSubprocessTests(unittest.TestCase):
+    """Model the reviewed manager's persisted-enable then global-sync order.
+
+    A real subprocess sees the real command runner's final environment. The
+    fixture's reconciliation only writes a temporary proof file; it has no
+    sockets, root cache, actual Hyprpm or desktop access.
+    """
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="hyprveil-enable-subprocess-")
+        self.addCleanup(temporary.cleanup)
+        self.home = Path(temporary.name)
+        self.instance = setup.Setup(self.home, self.home / "manager-cache")
+        self.folder = self.instance.cache / "hyprveil"
+        self.folder.mkdir(parents=True)
+        self.state = self.folder / "state.toml"
+        self.source, self.revision = "https://example.invalid/reviewed-core", "a" * 40
+        self.initial = ("[repository]\nname='hyprveil'\nurl='" + self.source + "'\nrev='" + self.revision +
+                        "'\n[hyprveil]\nfilename='hyprveil.so'\nenabled=false\nfailed=false\n")
+        self.state.write_text(self.initial)
+        (self.folder / "hyprveil.so").write_bytes(b"fixture cache artifact; never executed")
+        self.proof = self.home / "unrelated-fx-was-unloaded"
+        self.fixture = self.home / "manager_fixture.py"
+        self.fixture.write_text('''import os,sys
+from pathlib import Path
+home=Path(os.environ["HOME"])
+state=home/"manager-cache/hyprveil/state.toml"
+mode=sys.argv[1]
+if mode=="enable-failed": sys.exit(1)
+text=state.read_text().replace("enabled=false","enabled=true")
+if mode=="failed-build": text=text.replace("failed=false","failed=true")
+if mode=="wrong-revision": text=text.replace("rev='"+"a"*40+"'", "rev='"+"b"*40+"'")
+state.write_text(text)
+# Pinned main.cpp persists the flag BEFORE ensurePluginsLoadState(). The
+# latter checks getenv(HIS), then reconciles all loaded modules against cache.
+if "HYPRLAND_INSTANCE_SIGNATURE" in os.environ:
+    (home/"unrelated-fx-was-unloaded").write_text("omarchy-fx")
+    sys.exit(0)
+print("PluginManager: no $HOME or $HYPRLAND_INSTANCE_SIGNATURE",file=sys.stderr)
+sys.exit(1)
+''')
+        stack = contextlib.ExitStack(); self.addCleanup(stack.close)
+        stack.enter_context(patch.dict(os.environ, HOME=str(self.home), HYPRLAND_INSTANCE_SIGNATURE="fixture-compositor"))
+        stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+        stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+
+    def transport(self, mode):
+        def run(argv, **kwargs):
+            self.assertEqual(tuple(argv), ("hyprpm", "enable", "hyprveil"))
+            return REAL_COMMAND([sys.executable, self.fixture, mode], **kwargs)
+        return run
+
+    def test_offline_enable_persists_flag_without_unloading_foreign_live_module(self):
+        # Positive control recreates the observed upstream side effect.
+        REAL_COMMAND([sys.executable, self.fixture, "success"], allowed=(0, 1))
+        self.assertTrue(self.proof.exists())
+        self.proof.unlink(); self.state.write_text(self.initial)
+        with patch.object(setup, "command", side_effect=self.transport("success")):
+            self.instance.enable(self.source, self.revision)
+        self.assertFalse(self.proof.exists())
+        self.assertTrue(self.instance.repositories()[0][1]["hyprveil"]["enabled"])
+        self.assertEqual(os.environ["HYPRLAND_INSTANCE_SIGNATURE"], "fixture-compositor", "isolation must be scoped to the child")
+
+    def test_offline_return_one_does_not_hide_registration_or_build_failure(self):
+        for mode in ("enable-failed", "failed-build", "wrong-revision"):
+            with self.subTest(mode=mode):
+                self.state.write_text(self.initial)
+                with patch.object(setup, "command", side_effect=self.transport(mode)), self.assertRaises(setup.files.Refused):
+                    self.instance.enable(self.source, self.revision)
+                self.assertFalse(self.proof.exists())
 
 
 class CacheReaderTests(unittest.TestCase):

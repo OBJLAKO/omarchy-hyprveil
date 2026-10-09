@@ -12,7 +12,10 @@ titles and uses a bundled, versioned controller and the public native API.
 Hyprpm owns native build/cache/enable state. Explicit first-click terminal setup
 can fetch and build the pinned core, write backed-up marked startup/settings,
 and selectively load its manager-built artifact. It asks before ordinary setup
-and separately before a broader header/manager update. Missing build tools or
+and separately before a broader header/manager update. Ordinary enable and
+selective activation avoid global compositor synchronization. A separately
+authorized `hyprpm update` can rebuild all registered repositories, synchronize
+loaded plugins and unload manually loaded modules. Missing build tools or
 Hyprpm cache operations may require `sudo`. The exact native pin is recorded in
 `native-release.json`; setup refuses other compositor ABIs, unsafe files and
 recognized legacy loaders. Existing guarded legacy loading remains an explicit

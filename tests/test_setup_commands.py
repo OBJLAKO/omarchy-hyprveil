@@ -13,6 +13,7 @@ from pathlib import Path
 import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -43,6 +44,14 @@ class SetupCommandTests(unittest.TestCase):
     def test_allowed_nonzero_preserves_dependency_list(self):
         output = self.run_command("import sys; print('cmake'); sys.exit(127)", allowed=(0, 127))
         self.assertEqual(output, "cmake\n")
+
+    def test_offline_manager_child_has_no_compositor_signature(self):
+        with patch.dict(os.environ, HYPRLAND_INSTANCE_SIGNATURE="do-not-contact-live-session"):
+            code = "import os,json; print(json.dumps([os.getenv('HYPRLAND_INSTANCE_SIGNATURE'),os.getenv('XDG_RUNTIME_DIR')]))"
+            expected_runtime = os.environ.get("XDG_RUNTIME_DIR")
+            self.assertEqual(json.loads(self.run_command(code, compositor=False)), [None, expected_runtime])
+            self.assertEqual(json.loads(self.run_command(code)), ["do-not-contact-live-session", expected_runtime])
+            self.assertEqual(os.environ["HYPRLAND_INSTANCE_SIGNATURE"], "do-not-contact-live-session")
 
     def test_stdout_flood_without_newline_is_refused(self):
         with self.assertRaisesRegex(setup.files.Refused, "oversized"):

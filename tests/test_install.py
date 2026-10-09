@@ -108,7 +108,7 @@ class InstallerTests(unittest.TestCase):
             backup = Path(report["backup"]).parent / "legacy-sky.hyprveil" / name
             self.assertEqual(backup.read_bytes(), contents)
             self.assertEqual(stat.S_IMODE(backup.stat().st_mode), 0o600)
-        self.assertEqual(json.loads((self.target / "manifest.json").read_text())["version"], "1.6.0")
+        self.assertEqual(json.loads((self.target / "manifest.json").read_text())["version"], "1.6.1")
 
     def test_existing_new_entry_wins_and_duplicate_owned_eyes_are_removed(self):
         self.initial["bar"]["layout"]["left"].append({"id": "sky.hyprveil"})
