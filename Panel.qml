@@ -31,10 +31,14 @@ Ui.Panel {
     property bool queryManual: false
     property bool statusChecked: false
     property string queuedAction: ""
-    property var queuedAppearance: null
     property string tab: "hide"
     property var appearanceDraft: Appearance.defaults()
     property bool appearanceDirty: false
+    property var appearanceEdits: ({})
+    property int appearanceRevision: 0
+    property bool appearanceSaveBlocked: false
+    property string appearanceError: ""
+    property var submittedFields: null
     property var submittedAppearance: null
     signal idleReady()
     property int cursor: 0
@@ -86,17 +90,25 @@ Ui.Panel {
         else if (!current.known) message = root.tr("status_unconfirmed")
         else if (pendingConfirmation !== "") {
             if (pendingConfirmation === "configure") {
-                if (Appearance.equal(current.appearance, submittedAppearance)) {
-                    if (Appearance.equal(appearanceDraft, submittedAppearance) && editor.colorValid) {
-                        appearanceDraft = Appearance.parse(current.appearance)
-                        appearanceDirty = false
-                        editor.syncColor()
-                        message = root.tr("appearance_applied")
-                    } else {
-                        appearanceDirty = true
-                        message = root.tr("appearance_applied_dirty")
+                var confirmed = current.loaded && submittedFields !== null
+                var fields = Object.keys(submittedFields || {})
+                for (var i = 0; i < fields.length; ++i) {
+                    if (current.appearance[fields[i]] !== submittedFields[fields[i]].value) confirmed = false
+                }
+                if (confirmed) {
+                    var remaining = Object.assign({}, appearanceEdits)
+                    for (var j = 0; j < fields.length; ++j) {
+                        var key = fields[j]
+                        // Only the exact edit that was sent is acknowledged.
+                        // Newer values, including a quick change back, survive.
+                        if (remaining[key] && remaining[key].revision === submittedFields[key].revision)
+                            delete remaining[key]
                     }
-                } else message = root.tr("appearance_unconfirmed")
+                    appearanceEdits = remaining
+                } else {
+                    appearanceSaveBlocked = true
+                    appearanceError = root.tr("appearance_unconfirmed")
+                }
             } else if ((pendingConfirmation === "start" || pendingConfirmation === "enable") && current.loaded)
                 message = root.tr("loaded")
             else if (pendingConfirmation === "reload-config" && current.loaded)
@@ -105,19 +117,29 @@ Ui.Panel {
                 message = root.tr("setting_applied")
             else message = root.tr("state_changed")
         }
-        if (current.known && !appearanceDirty && !Appearance.equal(appearanceDraft, current.appearance)) {
-            appearanceDraft = Appearance.parse(current.appearance)
-            editor.syncColor()
+        if (!current.known && Object.keys(appearanceEdits).length) {
+            appearanceSaveBlocked = true
+            appearanceError = root.tr("appearance_unconfirmed")
         }
+        if (current.known) {
+            // Native/Lua changes to untouched fields remain authoritative.
+            // Overlay only this editor's unconfirmed field values.
+            var merged = Appearance.parse(current.appearance)
+            var edits = Object.keys(appearanceEdits)
+            for (var k = 0; k < edits.length; ++k) merged[edits[k]] = appearanceEdits[edits[k]].value
+            if (!Appearance.equal(appearanceDraft, merged)) appearanceDraft = merged
+        }
+        appearanceDirty = Object.keys(appearanceEdits).length > 0
         pendingConfirmation = ""
+        submittedFields = null
         submittedAppearance = null
         if (queuedAction !== "") {
-            var action = queuedAction, parameters = queuedAppearance
-            queuedAction = ""; queuedAppearance = null
-            if (action === "configure") applyAppearance(parameters)
-            else act(action)
+            var action = queuedAction
+            queuedAction = ""
+            act(action, true)
         }
         idleReady()
+        Qt.callLater(flushAppearance)
     }
     function collectQuery(chunk) {
         if (!querying || queryOverflow || queryTimedOut) return
@@ -129,30 +151,62 @@ Ui.Panel {
             query.signal(9)
         } else queryOut += chunk
     }
-    function act(action) {
-        if (!opened || busy || !State.allowed(action, current)) return
-        if (querying) { queuedAction = action; queuedAppearance = null; return }
+    function act(action, alreadyRequested) {
+        if ((!opened && alreadyRequested !== true) || !State.allowed(action, current)) return
+        if (acting && actionName === "configure") { queuedAction = action; return }
+        if (busy) return
+        if (querying) { queuedAction = action; return }
         beginAction(action, [action])
     }
     function editAppearance(key, value) {
-        if (acting) return
-        var next = Appearance.update(appearanceDraft, key, value)
+        var patch = {}; patch[key] = value
+        editAppearancePatch(patch)
+    }
+    function editAppearancePatch(patch, force) {
+        var next = Appearance.updateMany(appearanceDraft, patch)
         if (!next) return
+        var fields = Object.keys(patch), changed = false
+        if (!fields.length) return
+        for (var i = 0; i < fields.length; ++i)
+            if (next[fields[i]] !== appearanceDraft[fields[i]]) changed = true
+        if (!changed && !force && !appearanceSaveBlocked) return
+        var edits = Object.assign({}, appearanceEdits)
+        appearanceRevision++
+        for (var j = 0; j < fields.length; ++j) {
+            var key = fields[j]
+            if (force || appearanceSaveBlocked || next[key] !== appearanceDraft[key])
+                edits[key] = {value: next[key], revision: appearanceRevision}
+        }
+        appearanceEdits = edits
         appearanceDraft = next
-        appearanceDirty = !current.known || !Appearance.equal(next, current.appearance)
+        appearanceDirty = true
+        appearanceSaveBlocked = false
+        appearanceError = ""
+        message = ""
+        appearanceAutosave.restart()
     }
     function applyAppearance(parameters) {
-        var p = Appearance.parse(parameters || appearanceDraft)
-        if (!opened || busy || !current.known || !current.loaded || !p || (!parameters && !editor.colorValid)) return
-        if (querying) { queuedAction = "configure"; queuedAppearance = p; return }
-        submittedAppearance = p
-        beginAction("configure", Appearance.command(p))
+        // Retained for IPC/test callers; normal controls all use autosave.
+        if (parameters) editAppearancePatch(parameters, true)
+        appearanceAutosave.stop()
+        flushAppearance()
+    }
+    function flushAppearance() {
+        if (!appearanceDirty || appearanceSaveBlocked || busy || querying || submittedFields !== null || appearanceAutosave.running) return
+        if (!current.known) { refresh(false, true); return }
+        if (!current.loaded) {
+            appearanceSaveBlocked = true
+            appearanceError = root.tr("appearance_unconfirmed")
+            return
+        }
+        if (!Object.keys(appearanceEdits).length) { appearanceDirty = false; return }
+        submittedFields = Object.assign({}, appearanceEdits)
+        submittedAppearance = Appearance.parse(appearanceDraft)
+        beginAction("configure", Appearance.command(submittedAppearance, Object.keys(submittedFields)))
     }
     function resetAppearance() {
-        appearanceDraft = Appearance.defaults()
-        appearanceDirty = !current.known || !Appearance.equal(appearanceDraft, current.appearance)
+        editAppearancePatch(Appearance.defaults(), true)
         editor.syncColor()
-        applyAppearance(appearanceDraft)
     }
     function setTab(next) {
         if (["hide", "customize"].indexOf(next) < 0) return
@@ -163,10 +217,10 @@ Ui.Panel {
         acting = true
         actionName = action
         pendingConfirmation = ""
-        message = ""
+        if (action !== "configure") message = ""
         // A query result is only a snapshot. Do not display it as proof while
         // a mode transition is in flight; a new status is required afterwards.
-        current = State.unknown()
+        if (action !== "configure") current = State.unknown()
         actionFinished = false
         actionTimedOut = false
         actionCode = -1
@@ -178,16 +232,17 @@ Ui.Panel {
         if (!acting || !actionFinished) return
         actionTimeout.stop()
         acting = false
-        if (actionTimedOut) message = root.tr("controller_timeout")
-        else if (actionCode !== 0) message = actionName === "configure"
-            ? root.tr("appearance_failed")
-            : actionName === "reload-config" ? root.tr("lua_failed")
+        if (actionName === "configure" && (actionTimedOut || actionCode !== 0)) {
+            appearanceSaveBlocked = true
+            appearanceError = root.tr(actionTimedOut ? "controller_timeout" : "appearance_failed")
+        } else if (actionTimedOut) message = root.tr("controller_timeout")
+        else if (actionCode !== 0) message = actionName === "reload-config" ? root.tr("lua_failed")
             : root.tr("action_unconfirmed")
         else {
             pendingConfirmation = actionName
-            message = root.tr("command_checking")
+            if (actionName !== "configure") message = root.tr("command_checking")
         }
-        Qt.callLater(function() { refresh(false) })
+        Qt.callLater(function() { refresh(false, actionName === "configure") })
     }
     function options() {
         if (!current.known) return ["refresh"]
@@ -226,10 +281,21 @@ Ui.Panel {
             // its cached value as a last check, so closed-panel snapshots cannot
             // promise a live privacy state.
             Qt.callLater(function() { refresh(false) })
+        } else {
+            // A click already authorized these edits. Closing the popout does
+            // not cancel its last value or require another open to confirm it.
+            if (!editor.colorValid) editor.syncColor()
+            appearanceAutosave.stop()
+            Qt.callLater(flushAppearance)
         }
     }
+    onBusyChanged: if (!busy) Qt.callLater(function() {
+        if (submittedFields !== null || pendingConfirmation !== "") refresh(false, true)
+        else flushAppearance()
+    })
 
     Timer { interval: 2500; repeat: true; running: root.opened; onTriggered: root.refresh() }
+    Timer { id: appearanceAutosave; interval: 120; onTriggered: root.flushAppearance() }
     Timer {
         id: queryTimeout
         interval: 12000
@@ -238,7 +304,7 @@ Ui.Panel {
             root.queryOut = ""
             root.current = State.unknown()
             root.message = root.tr("query_timeout")
-            root.queuedAction = ""; root.queuedAppearance = null
+            root.queuedAction = ""
             // running=false sends SIGTERM and can leave a stuck child alive.
             // Retain ownership until its real exit; do not reuse this Process.
             query.signal(9)
@@ -382,7 +448,7 @@ Ui.Panel {
                             Text {
                                 id: pillText
                                 anchors.centerIn: parent
-                                text: root.acting ? root.tr("changing") : root.querying && root.queryManual ? root.tr("checking_short") : !root.current.known ? (!root.statusChecked && root.querying ? root.tr("checking_short") : root.tr("offline"))
+                                text: root.acting && root.actionName !== "configure" ? root.tr("changing") : root.querying && root.queryManual ? root.tr("checking_short") : !root.current.known ? (!root.statusChecked && root.querying ? root.tr("checking_short") : root.tr("offline"))
                                     : root.current.mode === "spoiler" ? root.tr("spoiler") : root.current.mode === "omit" ? root.tr("hidden_short")
                                     : root.current.mode === "black" ? root.tr("mask_short") : root.current.loaded ? root.tr("image_short") : root.tr("unloaded_short")
                                 textFormat: Text.PlainText
@@ -440,7 +506,7 @@ Ui.Panel {
                     Text {
                         width: parent.width
                         visible: root.current.spoilerFallback
-                        text: root.acting ? root.tr("changing_style") : root.querying && root.queryManual ? root.tr("checking") : State.label(root.current.mode, root.current.spoilerFallback, root.language)
+                        text: root.acting && root.actionName !== "configure" ? root.tr("changing_style") : root.querying && root.queryManual ? root.tr("checking") : State.label(root.current.mode, root.current.spoilerFallback, root.language)
                         textFormat: Text.PlainText
                         color: root.current.spoilerFallback ? Color.urgent : root.current.known ? root.foreground : Color.muted
                         font.family: root.fontFamily
@@ -580,14 +646,15 @@ Ui.Panel {
                         draft: root.appearanceDraft
                         mode: root.current.mode
                         dirty: root.appearanceDirty
-                        busy: root.busy || !root.current.known || !root.current.loaded
-                        enabled: !root.acting && root.current.known && root.current.loaded && !(root.hostWidget && root.hostWidget.privacyBusy)
+                        busy: (root.acting && root.actionName !== "configure") || !root.current.known || !root.current.loaded
+                        saving: (root.acting && root.actionName === "configure") || root.submittedFields !== null
+                        enabled: (!root.acting || root.actionName === "configure") && root.current.known && root.current.loaded
                         animate: root.opened && visible
                         fontFamily: root.fontFamily
                         onEdited: function(key, value) { root.editAppearance(key, value) }
-                        onVariantPicked: function(variant) { root.editAppearance("variant", variant); root.applyAppearance() }
-                        onInteractionStarted: root.appearanceDirty = true
-                        onApplyRequested: root.applyAppearance()
+                        onEditedPatch: function(patch) { root.editAppearancePatch(patch) }
+                        onVariantPicked: function(variant) { root.editAppearance("variant", variant) }
+                        onColorValidChanged: if (colorValid) Qt.callLater(root.flushAppearance)
                         onResetRequested: root.resetAppearance()
                         onCloseRequested: root.close()
                     }
@@ -630,7 +697,7 @@ Ui.Panel {
                     Text {
                         width: parent.width
                         height: Style.space(34)
-                        text: root.message
+                        text: root.appearanceError || root.message
                         textFormat: Text.PlainText
                         color: root.current.known ? root.foreground : Color.urgent
                         font.family: root.fontFamily

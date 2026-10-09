@@ -33,8 +33,8 @@
       "bytes": 42199
     },
     "assets/appearance-panel.png": {
-      "sha256": "81b4e2d3c0e087b73d05c8e5afcf1d3f718e5c95eeb4f787d2bdaf50000d0841",
-      "bytes": 82847
+      "sha256": "109d22a71cdbfdbfc2c47d82ac524fc9ed835202eeb6effb68eedac5b4dd2c66",
+      "bytes": 83889
     },
     "assets/social-preview.png": {
       "sha256": "f46eb09b6bbdad4c69504f258ac9dff2f7cbb2fa2273392f1b0e91aa597be7c9",
@@ -47,6 +47,10 @@
     "assets/native-demo.png": {
       "sha256": "6729773b98172779cf5aad9a8f73bbaa557c8add9e8ccd78255fbab5374e3a82",
       "bytes": 153338
+    },
+    "assets/native-styles.gif": {
+      "sha256": "acbf65713a3dd16e60888d94cc13759607aa3815c98aa97de1da797a8b50d824",
+      "bytes": 2424590
     },
     "assets/presets/anonymous.png": {
       "sha256": "b0ef7d9bf26cea27f55c4213b8e8f617d1ee07423605252f019067c84f13efbe",
@@ -91,10 +95,6 @@
     "assets/presets/signal.png": {
       "sha256": "6c393ca46d98a32d6ffb6fdbe4a7e66df24e5e51bce7090bd8d4ecf96795a6bf",
       "bytes": 47930
-    },
-    "assets/native-styles.gif": {
-      "sha256": "acbf65713a3dd16e60888d94cc13759607aa3815c98aa97de1da797a8b50d824",
-      "bytes": 2424590
     }
   },
   "native_styles": {

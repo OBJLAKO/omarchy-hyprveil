@@ -15,6 +15,22 @@ const sample = mode => ({enabled: true, loaded: true, desired_mode: mode, appear
     status: {session: 'live', local_dump: 'disabled-in-live', mode, spoiler_status: 'ready', appearance: defaults()}});
 let count = 0;
 function test(name, fn) { fn(); console.log('ok', ++count, name); }
+test('autosave patches validate atomically and send only edited fields', () => {
+    const before = {...defaults(), eye: false, icon: 'none', grain: 67};
+    const next = appearance.updateMany(before, {eye: true, icon: 'shield'});
+    assert.equal(next.eye, true);
+    assert.equal(next.icon, 'shield');
+    assert.equal(next.grain, 67);
+    assert.deepEqual(JSON.parse(JSON.stringify(appearance.command(next, ['icon', 'eye']))),
+        ['configure', '--icon', 'shield', '--eye', 'on']);
+    assert.equal(appearance.updateMany(before, {icon: 'shield', eye: 'true'}), null);
+    assert.equal(appearance.updateMany(before, {mode: 'spoiler'}), null);
+    assert.equal(appearance.command(next, ['icon', 'icon']).length, 0);
+    assert.equal(appearance.command(next, ['mode']).length, 0);
+    assert.equal(appearance.command(next, []).length, 0);
+    assert.equal(appearance.updateMany(before, {color: '#AABBCC'}).color, '#aabbcc');
+    assert.equal(before.eye, false, 'atomic merge must not mutate the previous draft');
+});
 test('all live modes require attested status', () => {
     for (const mode of ['omit', 'black', 'spoiler', 'image']) {
         const state = parse(sample(mode));

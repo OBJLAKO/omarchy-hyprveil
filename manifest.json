@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.objlako.hyprveil",
   "name": "Hyprveil",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "author": "OBJLAKO",
   "description": "Keep private windows visible on your desktop and hidden from screen sharing. First click sets up the native Hyprland plugin with hyprpm in a terminal; setup shows changes and asks first.",
   "kinds": [

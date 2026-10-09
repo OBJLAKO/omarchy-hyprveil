@@ -12,6 +12,7 @@ Column {
     property var draft: Appearance.defaults()
     property bool dirty: false
     property bool busy: false
+    property bool saving: false
     property bool animate: false
     property bool advanced: false
     property string mode: "spoiler"
@@ -19,9 +20,8 @@ Column {
     property string fontFamily: "Adwaita Sans"
     readonly property bool colorValid: hex.acceptableInput
     signal edited(string key, var value)
+    signal editedPatch(var patch)
     signal variantPicked(string variant)
-    signal interactionStarted()
-    signal applyRequested()
     signal resetRequested()
     signal closeRequested()
     function syncColor() { hex.text = draft.color }
@@ -81,7 +81,7 @@ Column {
                 color: "transparent"
                 border.width: selected || activeFocus ? 1 : 0
                 border.color: selected ? Color.accent : root.foreground
-                enabled: !root.busy && root.colorValid
+                enabled: !root.busy
                 opacity: enabled ? 1 : 0.45
                 activeFocusOnTab: true
                 Accessible.role: Accessible.Button
@@ -139,10 +139,11 @@ Column {
             text: root.draft.color; maximumLength: 7; placeholderText: "#ffffff"
             validator: RegularExpressionValidator { regularExpression: /#[0-9a-fA-F]{6}/ }
             onTextEdited: {
-                root.interactionStarted()
                 if (acceptableInput) root.edited("color", text.toLowerCase())
             }
-            onEditingFinished: if (acceptableInput) root.edited("color", text.toLowerCase())
+            // Only human text edits create intent. A native color can change
+            // while this field merely has focus; blur must not send stale text.
+            onActiveFocusChanged: if (!activeFocus) root.syncColor()
         }
     }
     Adjustment { caption: root.tr("grain"); value: root.draft.grain; onEdited: function(next) { root.edited("grain", next) } }
@@ -165,12 +166,12 @@ Column {
                     required property string modelData
                     width: (parent.width - parent.spacing * 3) / 4
                     text: root.tr("icon_" + modelData)
+                    tooltipText: (root.draft.variant === "error404" || root.draft.variant === "anonymous") && modelData !== "none" ? root.tr("art_icon_hint") : ""
                     selected: (root.draft.eye ? root.draft.icon : "none") === modelData
                     bordered: true; focusable: true; enabled: !root.busy
                     fontFamily: root.fontFamily; fontSize: Style.space(11)
                     onClicked: {
-                        root.edited("icon", modelData)
-                        root.edited("eye", modelData !== "none")
+                        root.editedPatch({icon: modelData, eye: modelData !== "none"})
                     }
                 }
             }
@@ -188,13 +189,14 @@ Column {
     }
     Row {
         width: parent.width; spacing: Style.space(8)
-        Button {
+        Text {
             width: (parent.width - parent.spacing) * 0.56
-            text: root.busy ? root.tr("applying") : root.dirty ? root.tr("apply") : root.tr("applied")
-            selected: root.dirty; bordered: true; focusable: true
-            enabled: root.dirty && root.colorValid && !root.busy
-            fontFamily: root.fontFamily; fontSize: Style.space(12)
-            onClicked: root.applyRequested()
+            height: Style.space(31)
+            verticalAlignment: Text.AlignVCenter
+            text: !root.colorValid ? root.tr("color_invalid") : root.saving ? root.tr("autosaving") : root.tr("autosave_hint")
+            textFormat: Text.PlainText; color: Color.muted
+            font.family: root.fontFamily; font.pixelSize: Style.space(11)
+            wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight
         }
         Button {
             width: (parent.width - parent.spacing) * 0.44
@@ -205,8 +207,7 @@ Column {
     }
     Text {
         width: parent.width
-        text: (root.mode === "spoiler" ? root.tr("spoiler_only") : root.tr("spoiler_later"))
-            + ((root.draft.variant === "error404" || root.draft.variant === "anonymous") && root.draft.eye && root.draft.icon !== "none" ? "\n" + root.tr("art_icon_hint") : "")
+        text: root.mode === "spoiler" ? root.tr("spoiler_only") : root.tr("spoiler_later")
         textFormat: Text.PlainText; color: Color.muted; font.family: root.fontFamily; font.pixelSize: Style.space(11); wrapMode: Text.WordWrap
     }
 }

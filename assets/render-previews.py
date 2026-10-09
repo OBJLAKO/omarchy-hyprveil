@@ -6,6 +6,7 @@ the fixture has no desktop environment, native controller or personal pixels.
 """
 import json
 import hashlib
+import argparse
 from pathlib import Path
 import subprocess
 import tempfile
@@ -17,6 +18,9 @@ ASSETS = ROOT / "assets"
 APPEARANCE = {"variant": "error404", "color": "#ffffff", "grain": 50,
               "speed": 100, "darkness": 35, "eye": False, "eye_size": 80, "icon": "none", "icon_opacity": 75}
 NATIVE_POSTER_SHA256 = "6729773b98172779cf5aad9a8f73bbaa557c8add9e8ccd78255fbab5374e3a82"
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--panels-only", action="store_true", help="update only offscreen QML screenshots and their provenance")
+args = parser.parse_args()
 
 
 def marketplace_cover():
@@ -210,8 +214,9 @@ ShellRoot {
     if result.returncode or "HYPRVEIL_PUBLIC_PREVIEW_OK" not in result.stdout:
         raise SystemExit(result.stdout)
     frames_png = [Image.open(path).convert("RGB") for path in sorted(frames.glob("*.png"))]
-    frames_png[0].save(ASSETS / "spoiler-preview.gif", save_all=True, append_images=frames_png[1:],
-                       duration=438, loop=0, optimize=True)
+    if not args.panels_only:
+        frames_png[0].save(ASSETS / "spoiler-preview.gif", save_all=True, append_images=frames_png[1:],
+                           duration=438, loop=0, optimize=True)
     for name in ("hiding-panel.png", "appearance-panel.png"):
         with Image.open(ASSETS / name) as image:
             assert image.mode in ("RGB", "RGBA")
@@ -222,7 +227,8 @@ ShellRoot {
 
 # The QML process and its isolated fixture have both stopped before publishing
 # the final composition and its hashes.
-marketplace_cover()
+if not args.panels_only:
+    marketplace_cover()
 write_provenance()
 assert (ROOT / "preview.png").is_file()
-print("Rendered English QML panels, synthetic animation, minimal 1280×640 illustrated cover.")
+print("Rendered English QML panels." if args.panels_only else "Rendered English QML panels, synthetic animation, minimal 1280×640 illustrated cover.")

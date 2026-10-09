@@ -260,11 +260,12 @@ The Appearance / Оформление tab exposes the pattern controls and an Ad
 
 Old `eye = false` settings still hide the icon. Choosing a shape enables it; choosing None hides it. Old `eye_size` remains the icon size. Native aliases `satin`, `telegram` and `grid` map to Prism, Signal and Radar. `404`, `cmatrix`, `anon`, `liquid-glass` and `liquidglass` are accepted aliases for the new themes.
 
-Preset swatches are actual native GPU captures of synthetic fixtures at fixed reference settings. The larger preview is a procedural illustration of your draft and never samples client pixels. Color and
-darkness keep the mask opaque. Apply requires a native acknowledgement and a fresh status check. With no
+Preset swatches are actual native GPU captures of synthetic fixtures at fixed reference settings. The larger preview follows your edits and never samples client pixels. Color and
+darkness keep the mask opaque. Themes, icons, colors and sliders all save automatically after a brief 120 ms pause, without an Apply button. The controls stay usable during saving. Quick edits are combined, and a completed save cannot replace a newer choice. Only edited fields are sent, so native or Lua changes to other fields are preserved. Closing the panel finishes pending valid changes. An incomplete color is not applied and does not block other settings.
+
+Each save requires a native acknowledgement and a fresh status check. With no
 managed Lua file it changes the current session, and the panel displays a
-permanent session-only note. Variant buttons apply immediately while keeping
-other parameters. Reset appearance restores defaults and keeps the hiding
+permanent session-only note. Reset appearance restores defaults and keeps the hiding
 mode. When Black or Omit is selected, these parameters take effect after
 selecting Spoiler.
 
@@ -282,18 +283,23 @@ The runtime style editor changes only the managed settings block. Startup
 integration is a separate, explicitly confirmed terminal setup action.
 
 Once the managed literal block exists, panel saves update its settings and
-verify the native result after reload. Custom Lua belongs outside that block
-and is preserved. Custom code inside it, unsafe file permissions or a later
-override can cause a save to be refused; the panel keeps the draft and reports
-the failure. A missing managed file permits session-only changes; an unsafe
-existing file is refused before changing native state.
+verify the native result without requesting a desktop configuration reload.
+Custom Lua outside that block is preserved. Custom code inside it, unsafe file
+permissions or concurrent native/file changes can cause a save to be refused;
+the panel keeps your edits and reports
+the failure. It does not retry continuously. Change a setting after fixing the problem to retry. A missing managed file permits session-only changes; an unsafe
+existing file is refused before changing native state. The setup's standard
+`dofile` integration does not register the settings file with the automatic
+configuration watcher in the reviewed Hyprland ABI. Custom `require` or wildcard
+watchers can still trigger reloads when a file changes.
 
-**Reload Lua / Перечитать Lua** explicitly reloads configuration and confirms the native
-result. It preserves an unsaved draft; clean fields follow the new state.
+**Reload Lua / Перечитать Lua** explicitly reloads configuration, runs custom
+Lua and confirms the native result. Later Lua overrides take effect on that
+reload or the next login. Pending edits are preserved; clean fields follow the new state.
 The separate refresh control reads current status without reloading Lua.
 Normal polling runs every 2.5 seconds only while the panel is open. It does
 not flash loading labels, dim controls or discard drafts, including partially
-entered colors. New edits made during an apply remain in the draft.
+entered colors. Changes made during saving remain queued; only the exact submitted edit is acknowledged.
 
 Tab/arrows select hiding actions; Enter/Space activates them. R refreshes
 status, C opens appearance, and Esc closes the panel. Appearance fields

@@ -1,6 +1,9 @@
 .pragma library
 // Presentation only. No strings enter commands, status parsing or privacy checks.
 var strings = {
+    "autosave_hint": ["Changes save automatically", "Изменения сохраняются автоматически"],
+    "autosaving": ["Saving…", "Сохраняем…"],
+    "color_invalid": ["Enter a six-digit color", "Введите цвет из шести цифр"],
     "setup_native": ["Set up / repair Hyprveil…", "Установить / восстановить Hyprveil…"],
     "signal": ["Signal", "Сигнал"],
     "aurora": ["Aurora", "Аврора"],
@@ -60,8 +63,8 @@ var strings = {
         "Контроллер не ответил вовремя. Состояние требует новой проверки."
     ],
     "appearance_failed": [
-        "Could not apply appearance. Check your Lua configuration.",
-        "Не удалось применить оформление. Проверьте конфигурацию Lua."
+        "Could not save appearance. Check Lua settings, then change a value to retry.",
+        "Не удалось сохранить оформление. Проверьте Lua и измените настройку для повтора."
     ],
     "lua_failed": [
         "Could not reload Lua. Check your Hyprland configuration.",

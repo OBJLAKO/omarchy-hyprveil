@@ -111,8 +111,8 @@ effective privacy, including inherited protection; a question mark marks
 unconfirmed state.
 
 Choose Prism, Signal, Aurora, Contour, Radar, Matte, 404, Matrix, Anonymous or Liquid Glass, then tune color, grain,
-speed and darkness. Advanced settings offer an eye, lock or shield with size and icon opacity controls. Matte stays still. Drafts survive background
-checks. The panel follows native settings changed outside it. Managed Lua settings
+speed and darkness. Advanced settings offer an eye, lock or shield with size and icon opacity controls. Changes save automatically; there is no Apply button. Controls stay usable while saving, and the latest choice wins. Matte stays still. Background
+checks preserve your edits and follow native changes to other fields. Managed Lua settings
 persist; an independently installed core without managed Lua settings clearly
 marks session-only changes. The UI defaults to **English**, with **Russian** for a Russian
 system locale. [Controls and settings](docs/GUIDE.md#controls).

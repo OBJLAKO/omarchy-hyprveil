@@ -103,6 +103,15 @@ API verifies focus, address and stable identity atomically and refuses to reveal
 inherited protection. Unknown state disables privacy-changing actions.
 Confirmation comes from fresh native state rather than an optimistic UI result.
 
+Appearance controls use a shared 120 ms autosave queue. Each edited field has a
+revision; requests contain only pending fields, and confirmation acknowledges
+only the submitted revision. Polling merges native values into untouched fields
+while retaining newer edits. Icon shape and visibility are edited atomically.
+Configure keeps the confirmed mode and editor geometry in place and leaves
+inputs usable. Closing the panel flushes valid pending changes and completes a
+bounded background acknowledgement; a failed save stays latched until a new
+edit. Invalid raw color text never enters the pending native patch.
+
 The watcher binds to one owned runtime and compositor instance and validates its
 socket/process identity. Socket events serve as bounded wakeups; their titles
 are not decoded or logged. It emits only state, address, decimal stable ID,
@@ -115,7 +124,11 @@ Hyprpm owns native build/cache/enable state; the setup helper activates its
 registered artifact selectively. Explicit legacy recovery can load an older
 managed release through its guarded CLI. Native API actions can reload Lua.
 Saving appearance or mode delegates to the core controller's managed settings
-block. These are documented user actions, not install hooks. Without managed
+block without requesting a global reload or executing custom Lua. Explicit
+Reload Lua executes that configuration; later overrides then become native
+state. The standard `dofile` does not register the settings file for automatic
+watching in the reviewed ABI; custom `require`/wildcard watchers can reload it.
+These are documented user actions, not install hooks. Without managed
 Lua, changes affect only the current session and the panel displays that limit.
 A managed file enables guarded persistence; unsafe or custom persistence is
 refused before native mutation. All components are ordinary unsandboxed user

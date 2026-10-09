@@ -42,10 +42,31 @@ function update(value, key, next) {
     result[key] = next;
     return parse(result);
 }
-function command(value) {
+function updateMany(value, patch) {
+    var result = parse(value);
+    if (!result || !patch || typeof patch !== "object" || Array.isArray(patch)) return null;
+    var keys = Object.keys(patch);
+    for (var i = 0; i < keys.length; ++i) {
+        if (fields.indexOf(keys[i]) < 0) return null;
+        var next = patch[keys[i]];
+        if (keys[i] === "color" && typeof next === "string") next = next.toLowerCase();
+        result[keys[i]] = next;
+    }
+    return parse(result);
+}
+function command(value, keys) {
     var p = parse(value);
     if (!p) return [];
-    return ["configure", "--variant", p.variant, "--color", p.color,
-            "--grain", String(p.grain), "--speed", String(p.speed), "--darkness", String(p.darkness),
-            "--eye", p.eye ? "on" : "off", "--eye-size", String(p.eye_size), "--icon", p.icon, "--icon-opacity", String(p.icon_opacity)];
+    keys = keys === undefined ? fields : keys;
+    if (!Array.isArray(keys) || !keys.length) return [];
+    var names = {variant: "--variant", color: "--color", grain: "--grain", speed: "--speed", darkness: "--darkness",
+                 eye: "--eye", eye_size: "--eye-size", icon: "--icon", icon_opacity: "--icon-opacity"};
+    var result = ["configure"], seen = {};
+    for (var i = 0; i < keys.length; ++i) {
+        var key = keys[i];
+        if (fields.indexOf(key) < 0 || seen[key]) return [];
+        seen[key] = true;
+        result.push(names[key], key === "eye" ? (p.eye ? "on" : "off") : String(p[key]));
+    }
+    return result;
 }

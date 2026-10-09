@@ -18,7 +18,7 @@ args.add_argument("--language", choices=("auto", "en", "ru"), default="auto", he
 args.add_argument("--locale", choices=("en", "ru"), default="en", help="exercise the interface in an isolated Qt locale")
 args.add_argument("--missing-core", action="store_true", help="verify setup guidance without an installed controller")
 args.add_argument("--lab", type=Path, help="use stock KeyboardPanel in a marked isolated Hyprland lab")
-args.add_argument("--customize", action="store_true", help="exercise customization, preserved draft and steady background polling")
+args.add_argument("--customize", action="store_true", help="exercise automatic customization and steady background polling")
 args.add_argument("--presets", action="store_true", help="apply every opaque preset through the real selector")
 args.add_argument("--native-config", action="store_true", help="exercise authoritative native values and queued Lua reload")
 args.add_argument("--status-failure", action="store_true", help="exercise malformed fresh status after a successful action")
@@ -84,8 +84,11 @@ elif action == "configure":
         print("refused private diagnostic /secret/config.lua", file=sys.stderr)
         sys.exit(1)
     opts = dict(zip(sys.argv[2::2], sys.argv[3::2]))
-    state["appearance"] = {"variant": opts["--variant"], "color": opts["--color"], "grain": int(opts["--grain"]),
-        "speed": int(opts["--speed"]), "darkness": int(opts["--darkness"]), "eye": opts["--eye"] == "on", "eye_size": int(opts["--eye-size"]), "icon": opts["--icon"], "icon_opacity": int(opts["--icon-opacity"])}
+    names = {"--variant": "variant", "--color": "color", "--grain": "grain", "--speed": "speed", "--darkness": "darkness",
+        "--eye": "eye", "--eye-size": "eye_size", "--icon": "icon", "--icon-opacity": "icon_opacity"}
+    for flag, value in opts.items():
+        key = names[flag]
+        state["appearance"][key] = value == "on" if key == "eye" else value if key in ("variant", "color", "icon") else int(value)
     (home / "mock-state.json").write_text(json.dumps(state))
     print(json.dumps({"mode": state["mode"], "appearance": state["appearance"]}))
 elif action == "reload-config":
@@ -185,7 +188,6 @@ ShellRoot {
                 if (CONFIGURE_FAILURE) {
                     panel.setTab("customize")
                     panel.editAppearance("color", "#AABBCD")
-                    panel.applyAppearance()
                     stage = 30
                     return
                 }
@@ -224,6 +226,9 @@ ShellRoot {
                 if (CUSTOMIZE) {
                     panel.setTab("customize")
                     panel.editAppearance("color", "#AABBCD")
+                    panel.editAppearance("grain", 66)
+                    panel.editAppearance("speed", 201)
+                    if (panel.appearanceDraft.speed !== 100) throw new Error("invalid speed accepted")
                     panel.refresh(false)
                     stage = 7
                     return
@@ -240,28 +245,19 @@ ShellRoot {
             } else if (stage === 40) {
                 if (panel.current.known || panel.acting || JSON.stringify(visualSnapshot(panel)) !== unknownVisual) throw new Error("unknown state background poll flickered")
                 if (ticks-closedAt>=61 && !panel.querying) { console.log("HYPRVEIL_UNKNOWN_STEADY_OK"); panel.close(); closedAt=ticks; stage=6 }
-            } else if (stage === 30 && !panel.busy && !panel.querying) {
+            } else if (stage === 30 && panel.appearanceSaveBlocked && !panel.busy && !panel.querying) {
                 if (!panel.current.known || panel.current.mode !== "black" || panel.current.appearance.color !== "#ffffff" ||
                     !panel.appearanceDirty || panel.appearanceDraft.color !== "#aabbcd" ||
-                    panel.message !== panel.tr("appearance_failed") || panel.message.indexOf("/secret/") >= 0)
+                    panel.appearanceError !== panel.tr("appearance_failed") || panel.appearanceError.indexOf("/secret/") >= 0)
                     throw new Error("refused Lua persistence shown as applied or leaked diagnostics")
                 panel.close()
                 closedAt = ticks
                 stage = 6
-            } else if (stage === 7 && !panel.querying) {
-                if (!panel.appearanceDirty || panel.appearanceDraft.color !== "#aabbcd") throw new Error("poll overwrote unsaved draft")
-                panel.editAppearance("speed", 201)
-                if (panel.appearanceDraft.speed !== 100) throw new Error("invalid speed accepted")
-                panel.refresh(false)
-                panel.applyAppearance()
-                panel.editAppearance("grain", 66)
-                stage = 8
-            } else if (stage === 8 && !panel.busy && !panel.querying) {
-                if (!panel.current.known || panel.current.mode !== "omit" || panel.current.appearance.color !== "#aabbcd" || !panel.appearanceDirty || panel.appearanceDraft.grain !== 66)
+            } else if (stage === 7 && !panel.busy && !panel.querying && !panel.appearanceDirty) {
+                if (!panel.current.known || panel.current.mode !== "omit" || panel.current.appearance.color !== "#aabbcd" || panel.current.appearance.grain !== 66 || panel.appearanceDraft.grain !== 66)
                     throw new Error("appearance not acknowledged or hiding mode changed")
-                panel.applyAppearance()
                 stage = 18
-            } else if (stage === 18 && !panel.busy && !panel.querying) {
+            } else if (stage === 18 && !panel.busy && !panel.querying && !panel.appearanceDirty) {
                 if (panel.appearanceDirty || panel.current.appearance.grain !== 66) throw new Error("newer queued draft was discarded")
                 if (PRESETS && !presetsChecked) { stage=50; return }
                 if (NATIVE_CONFIG) {
@@ -275,21 +271,20 @@ ShellRoot {
                     return
                 }
                 panel.editAppearance("variant", "signal")
-                panel.applyAppearance()
                 stage = 9
-            } else if (stage === 50 && !panel.busy && !panel.querying) {
+            } else if (stage === 50 && !panel.busy && !panel.querying && !panel.appearanceDirty) {
                 var preset=presetItem(panel,presets[presetIndex])
                 if (!preset) throw new Error("preset selector missing")
                 preset.pick()
                 stage=51
-            } else if (stage === 51 && !panel.busy && !panel.querying) {
+            } else if (stage === 51 && !panel.busy && !panel.querying && !panel.appearanceDirty) {
                 if (!panel.current.known || panel.current.mode!=="omit" || panel.current.appearance.variant!==presets[presetIndex] ||
                     panel.current.appearance.grain!==66 || panel.current.appearance.color!=="#aabbcd" || panel.appearanceDirty)
                     throw new Error("preset selection lost parameters or confirmation")
                 presetIndex++
                 if (presetIndex===presets.length) { advancedEditor(panel).advanced=true; stage=60 }
                 else stage=50
-            } else if (stage === 60 && !panel.busy && !panel.querying) {
+            } else if (stage === 60 && !panel.busy && !panel.querying && !panel.appearanceDirty) {
                 var icon=iconItem(panel,icons[iconIndex])
                 if (!icon || !icon.visible) throw new Error("advanced icon selector missing")
                 icon.clicked()
@@ -297,9 +292,8 @@ ShellRoot {
                     throw new Error("icon visibility compatibility failed")
                 panel.editAppearance("eye_size",96)
                 panel.editAppearance("icon_opacity",42)
-                panel.applyAppearance()
                 stage=61
-            } else if (stage === 61 && !panel.busy && !panel.querying) {
+            } else if (stage === 61 && !panel.busy && !panel.querying && !panel.appearanceDirty) {
                 if (!panel.current.known || panel.current.mode!=="omit" || panel.current.appearance.icon!==icons[iconIndex] ||
                     panel.current.appearance.eye!==(icons[iconIndex]!=="none") || panel.current.appearance.eye_size!==96 ||
                     panel.current.appearance.icon_opacity!==42 || panel.current.appearance.grain!==66 || panel.appearanceDirty)
@@ -307,38 +301,39 @@ ShellRoot {
                 iconIndex++
                 if (iconIndex===icons.length) { advancedEditor(panel).advanced=false; presetsChecked=true; stage=18 }
                 else stage=60
-            } else if (stage === 20 && !panel.busy && !panel.querying) {
+            } else if (stage === 20 && !panel.busy && !panel.querying && !panel.appearanceDirty) {
                 if (!panel.current.known || panel.current.mode !== "spoiler" || panel.current.desiredMode !== "omit" ||
-                    panel.current.appearance.color !== "#e3d9ff" || !panel.appearanceDirty || panel.appearanceDraft.grain !== 73 ||
+                    panel.current.appearance.color !== "#e3d9ff" || panel.current.appearance.grain !== 73 || panel.appearanceDraft.grain !== 73 ||
                     panel.appearanceDraft.speed !== 0 || panel.message !== panel.tr("lua_reloaded_dirty"))
-                    throw new Error("Lua reload lost draft or used stale saved settings")
-                panel.appearanceDraft = panel.current.appearance
-                panel.appearanceDirty = false
+                    throw new Error("Lua reload lost pending partial edit or overwrote untouched native settings")
                 panel.refresh(false)
                 panel.act("reload-config")
                 stage = 21
-            } else if (stage === 21 && !panel.busy && !panel.querying) {
+            } else if (stage === 21 && !panel.busy && !panel.querying && !panel.appearanceDirty) {
                 if (!panel.current.known || panel.current.mode !== "black" || panel.current.desiredMode !== "omit" ||
                     panel.current.appearance.color !== "#adcfc8" || panel.appearanceDirty || panel.appearanceDraft.color !== "#adcfc8" ||
                     panel.appearanceDraft.grain !== 52 || panel.message !== panel.tr("lua_reloaded"))
                     throw new Error("clean draft did not follow confirmed native Lua settings")
                 panel.editAppearance("variant", "signal")
-                panel.applyAppearance()
                 stage = 9
-            } else if (stage === 9 && !panel.busy && !panel.querying) {
+            } else if (stage === 9 && !panel.busy && !panel.querying && !panel.appearanceDirty) {
                 if (panel.current.appearance.variant !== "signal" || panel.current.appearance.color !== (NATIVE_CONFIG ? "#adcfc8" : "#aabbcd") || panel.current.appearance.grain !== (NATIVE_CONFIG ? 52 : 66))
                     throw new Error("variant click lost preserved parameters")
                 panel.editAppearance("grain", 73)
                 panel.editAppearance("speed", 0)
+                stage = 10
+            } else if (stage === 10 && !panel.busy && !panel.querying && !panel.appearanceDirty) {
+                if (panel.current.appearance.grain !== 73 || panel.current.appearance.speed !== 0)
+                    throw new Error("final automatic edits not confirmed")
                 steadyCurrent = panel.current
                 steadyMessage = panel.message
                 closedAt = ticks
-                stage = 10
-            } else if (stage === 10) {
+                stage = 11
+            } else if (stage === 11) {
                 if (ticks - closedAt === 3 && !USE_LAB) window.contentItem.grabToImage(function(result) { result.saveToFile("CUSTOM_PREVIEW_PATH") })
-                if (panel.busy || panel.current !== steadyCurrent || panel.message !== steadyMessage || !panel.appearanceDirty ||
+                if (panel.busy || panel.current !== steadyCurrent || panel.message !== steadyMessage || panel.appearanceDirty ||
                     panel.appearanceDraft.grain !== 73 || panel.appearanceDraft.speed !== 0 || panel.cursor !== 0)
-                    throw new Error("background poll flickered or reset unsaved changes")
+                    throw new Error("background poll flickered or reset confirmed automatic changes")
                 if (ticks - closedAt >= 81 && !panel.querying) {
                     var button = widget.children.find(function(item) { return typeof item.triggerPress === "function" })
                     if (!button) throw new Error("bar button missing")
@@ -434,30 +429,27 @@ ShellRoot {
         print("passed missing-core guidance, locale and no-auto-install/load checks")
         raise SystemExit(0)
     log = [json.loads(line) for line in (home / "commands.jsonl").read_text().splitlines()]
-    expected = ["status", "spoiler", "status"]
+    expected = ["spoiler"]
     if not options.status_failure:
-        expected += ["omit", "status"]
+        expected += ["omit"]
     if options.customize:
-        expected += ["status", "status", "configure", "status", "configure", "status"]
+        expected += ["configure"]
         if options.presets:
-            expected += ["configure", "status"] * 14
+            # The already selected first prism preset is deliberately a no-op.
+            expected += ["configure"] * 13
         if options.native_config:
-            expected += ["status", "reload-config", "status", "status", "reload-config", "status"]
-        expected += ["configure", "status"]
+            expected += ["reload-config", "configure", "reload-config"]
+        expected += ["configure", "configure"]
     actions = [record["action"] for record in log]
     if options.configure_failure:
-        expected = ["status", "configure", "status"]
-    if options.presets:
-        # Applying ten presets can cross a normal background poll deadline.
-        # Assert every mutation and its confirming status while allowing those
-        # legitimate extra read-only checks between selector interactions.
-        if [action for action in actions if action != "status"] != [action for action in expected if action != "status"]:
-            raise SystemExit("unexpected preset mutations: " + repr(log))
-        for index, action in enumerate(actions):
-            if action != "status" and (index + 1 == len(actions) or actions[index + 1] != "status"):
-                raise SystemExit("preset mutation lacked fresh confirmation: " + repr(log))
-    elif actions[:len(expected)] != expected or any(action != "status" for action in actions[len(expected):]):
+        expected = ["configure"]
+    # Automatic saves can cross polling deadlines. Extra read-only snapshots
+    # are allowed, but every mutation and its fresh acknowledgement are exact.
+    if [action for action in actions if action != "status"] != expected:
         raise SystemExit("unexpected controller commands: " + repr(log))
+    for index, action in enumerate(actions):
+        if action != "status" and (index + 1 == len(actions) or actions[index + 1] != "status"):
+            raise SystemExit("mutation lacked fresh confirmation: " + repr(log))
     if not all(record["clean"] for record in log):
         raise SystemExit("unsafe inherited environment")
     print("passed QML load, action, fresh-status, allowlist, clean-environment and closed-panel polling checks")

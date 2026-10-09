@@ -9,10 +9,10 @@
     },
     "native_service.py": {
       "source": "tools/service.py",
-      "source_sha256": "d206642192fdb7d826e289a8bfb1113e0efde68662964450c6250446a7351439",
-      "bundled_sha256": "d206642192fdb7d826e289a8bfb1113e0efde68662964450c6250446a7351439"
+      "source_sha256": "0472206eeef240558b58ff2912b5f5901b207fcb71bc60ce5c61712356b142a7",
+      "bundled_sha256": "0472206eeef240558b58ff2912b5f5901b207fcb71bc60ce5c61712356b142a7"
     }
   },
-  "source_revision": "f575f3b757d5b959f0d3e638cf6d98b5a1d0301a",
+  "source_revision": "7e92c298312cf0e8d7cd930229ac15cda9e9ea27",
   "version": "0.5.0"
 }
