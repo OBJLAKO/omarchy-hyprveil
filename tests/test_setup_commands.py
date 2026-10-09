@@ -28,7 +28,9 @@ class SetupCommandTests(unittest.TestCase):
         while True:
             try:
                 state = Path("/proc", str(child), "stat").read_text().rsplit(")", 1)[1].split()[0]
-            except FileNotFoundError:
+            except (FileNotFoundError, ProcessLookupError):
+                # A process can exit after procfs opens stat but before read.
+                # ESRCH confirms cleanup just as ENOENT does.
                 state = "gone"
             if state in ("Z", "gone") or time.monotonic() >= deadline:
                 self.assertIn(state, ("Z", "gone"))
