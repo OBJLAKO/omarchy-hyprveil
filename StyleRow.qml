@@ -19,7 +19,7 @@ BorderSurface {
 
     width: parent ? parent.width : implicitWidth
     implicitWidth: Style.space(420)
-    implicitHeight: Style.space(78)
+    implicitHeight: Style.space(68)
     radius: Math.max(Style.cornerRadius, Style.space(10))
     opacity: enabled ? 1 : 0.55
     color: selected ? Qt.rgba(foreground.r, foreground.g, foreground.b, 0.06)
@@ -40,7 +40,7 @@ BorderSurface {
         width: Style.space(66)
         height: Style.space(48)
         radius: Style.space(7)
-        color: root.mode === "black" ? "#070a0e" : "#12181f"
+        color: root.mode === "black" ? "#000000" : root.mode === "color" || root.mode === "image" ? root.appearance.mask_color : "#12181f"
         border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.09)
         border.width: 1
         clip: true
@@ -58,6 +58,31 @@ BorderSurface {
                 c.moveTo(pad, height - pad - arm); c.lineTo(pad, height - pad); c.lineTo(pad + arm, height - pad)
                 c.moveTo(width - pad - arm, height - pad); c.lineTo(width - pad, height - pad); c.lineTo(width - pad, height - pad - arm)
                 c.stroke()
+            }
+        }
+        Item {
+            objectName: "imageAssetPlaceholder"
+            anchors.fill: parent
+            visible: root.mode === "image"
+            // User paths are never opened by Qt. Native validation/rendering
+            // owns PNG files, including paths edited before a save is accepted.
+            Canvas {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: Style.space(7); width: Style.space(27); height: Style.space(22)
+                onPaint: {
+                    var c = getContext("2d")
+                    c.reset(); c.strokeStyle = "#c3cfdc"; c.lineWidth = 1.1
+                    c.strokeRect(1.5, 1.5, width - 3, height - 3)
+                    c.beginPath(); c.arc(width * 0.72, height * 0.29, 2, 0, Math.PI * 2); c.stroke()
+                    c.beginPath(); c.moveTo(3, height - 5); c.lineTo(width * 0.35, height * 0.42)
+                    c.lineTo(width * 0.59, height * 0.7); c.lineTo(width - 3, height * 0.48); c.stroke()
+                }
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom; anchors.bottomMargin: Style.space(5)
+                text: "PNG"; textFormat: Text.PlainText; color: "#c3cfdc"
+                font.family: root.fontFamily; font.pixelSize: Style.space(9)
             }
         }
         SpoilerPreview {

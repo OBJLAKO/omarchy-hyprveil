@@ -1,8 +1,8 @@
 # Hyprveil panel guide
 
 This Omarchy widget controls [native Hyprveil](https://github.com/OBJLAKO/hyprveil)
-through its bundled controller and public Lua API. It requires the 0.5.0 native
-API; the core's tested Hyprland version is 0.56.2. The permanent Omarchy
+through its bundled controller and public Lua API. New rendering controls require
+native Hyprveil 0.6.0; the core's tested Hyprland version is 0.56.2. The permanent Omarchy
 plugin ID is `io.github.objlako.hyprveil`.
 
 ## Installation
@@ -33,8 +33,8 @@ no separate `~/.local/bin/hyprveil` or old installation receipt.
 
 ### What setup changes
 
-[`native-release.json`](../native-release.json) pins native version **0.5.0** to
-commit `f575f3b757d5b959f0d3e638cf6d98b5a1d0301a`. Setup fetches that exact clean
+[`native-release.json`](../native-release.json) pins native version **0.6.0** to
+the full source revision recorded in that file. Setup fetches that exact clean
 commit into `~/.local/share/omarchy-hyprveil/native-<commit>` and asks Hyprpm to
 build and enable it. Hyprpm's native manifest selects the reviewed source commit
 for the supported compositor ABI. The panel does not compile or publish its own
@@ -123,6 +123,15 @@ module. For a setup-owned native rebuild, stop sharing, arrange an unloaded
 session without the automatic loader, and run `./install.sh --plugin-only`
 from the updated widget checkout. Setup refuses a rebuild if the module is
 loaded. Review the native guide before changing the supported compositor ABI.
+
+Panel 1.7 retains the older core's supported controls while it remains loaded.
+Color, image placement, custom GLSL and PNG icons require native 0.6.0. Updating
+the widget alone does not activate those native features. Existing `black`
+and Stretch PNG settings keep their previous behavior.
+While native 0.5.0 is loaded, the panel keeps Black, Image, built-in styles and
+icons available. It disables the new asset controls and links to this update
+guide; it does not start a rebuild or reload automatically. Appearance reset
+preserves the current PNG, image sizing and mask color.
 
 To remove the widget, use either:
 
@@ -222,8 +231,15 @@ Keyboard shortcuts for native Hyprveil are configured separately in Hyprland.
 | :--- | :--- | :--- |
 | Spoiler / Спойлер | `spoiler` | An opaque procedural mask with ten appearance presets. |
 | Omit window / Полностью скрыть | `omit` | Exclude the protected window from compositor capture. |
-| Black mask / Обычная маска | `black` | A plain black mask. |
+| Color mask / Цветная маска | `color` | An opaque `mask_color` fill, black by default. |
+| Custom image / Своё изображение | `image` | A local PNG with Fill, Fit, Tile or Stretch sizing. |
 | Restore omission / Вернуть исходное скрытие | `omit` | Return to omission while Hyprveil stays loaded. |
+
+The earlier `black` mode remains a literal black mask for compatibility and safe fallback. The panel reports it as legacy; choose Color to use the configurable fill. `mask_color` is independent of the white-by-default Spoiler accent color. It also fills image letterboxing and a failed custom shader.
+
+Enter the image’s absolute local path and press Enter or leave the field, then choose Image. Fill covers the window and crops edges; Fit preserves the full image with opaque colored margins; Tile repeats it at its original pixel size; Stretch uses the full window dimensions and remains the compatibility default. Transparent PNG pixels are composited over the opaque fill.
+Image and custom icon previews show a synthetic PNG marker. The panel never
+opens user PNG files; the native plugin validates and renders the actual asset.
 
 Style changes preserve which windows are private. Your own desktop keeps
 its normal window contents. Style controls stay disabled until native state is
@@ -232,16 +248,18 @@ activates its registered artifact as described above.
 
 ## Appearance and native settings
 
-The Appearance / Оформление tab exposes the pattern controls and an Advanced icon section:
+The Appearance / Оформление tab exposes the pattern controls and an Advanced section for icons and an optional custom shader:
 
 | Field | Range/default |
 | :--- | :--- |
 | Variant | Prism / Signal / Aurora / Contour / Radar / Matte / 404 / Matrix / Anonymous / Liquid Glass; Prism by default |
-| Color | Opaque `#RRGGBB`; white by default |
+| Spoiler accent color | `#RRGGBB`; white by default; independent of the hiding tab’s mask color |
 | Grain | 0–100%; default 50% |
 | Speed | 0–200%; default 100%; 0 pauses the pattern; Matte is always still |
 | Darkness | 0–100%; default 50% |
-| Icon (Advanced) | Eye / Lock / Shield / None; Eye by default |
+| Icon (Advanced) | Crossed-out Eye / Lock / Shield / None / PNG; Eye by default |
+| Icon PNG path (Advanced) | Absolute local PNG path; selecting PNG activates it only after a path is committed |
+| Custom shader (Advanced) | Optional absolute `.frag` path; empty uses the selected built-in style |
 | Icon size (Advanced) | 40–128 px; default 80 px |
 | Icon opacity (Advanced) | 0–100%; default 75%; affects only the icon |
 
@@ -259,6 +277,8 @@ The Appearance / Оформление tab exposes the pattern controls and an Ad
 | Liquid Glass | Floating glass lenses over a synthetic cyan/violet field. |
 
 Old `eye = false` settings still hide the icon. Choosing a shape enables it; choosing None hides it. Old `eye_size` remains the icon size. Native aliases `satin`, `telegram` and `grid` map to Prism, Signal and Radar. `404`, `cmatrix`, `anon`, `liquid-glass` and `liquidglass` are accepted aliases for the new themes.
+If a custom PNG is rejected, selecting a built-in icon discards that pending
+path and recovers without resending it.
 
 Preset swatches are actual native GPU captures of synthetic fixtures at fixed reference settings. The larger preview follows your edits and never samples client pixels. Color and
 darkness keep the mask opaque. Themes, icons, colors and sliders all save automatically after a brief 120 ms pause, without an Apply button. The controls stay usable during saving. Quick edits are combined, and a completed save cannot replace a newer choice. Only edited fields are sent, so native or Lua changes to other fields are preserved. Closing the panel finishes pending valid changes. An incomplete color is not applied and does not block other settings.
@@ -266,8 +286,14 @@ darkness keep the mask opaque. Themes, icons, colors and sliders all save automa
 Each save requires a native acknowledgement and a fresh status check. With no
 managed Lua file it changes the current session, and the panel displays a
 permanent session-only note. Reset appearance restores defaults and keeps the hiding
-mode. When Black or Omit is selected, these parameters take effect after
+mode. It also clears custom shader/icon paths, while preserving mask color, image path and image sizing. When Color, legacy Black, Image or Omit is selected, these parameters take effect after
 selecting Spoiler.
+
+Paths commit on Enter or when leaving the field; typing alone does not send incomplete paths. The same partial-field autosave queue confirms their native readback, so later edits and changes to other settings survive in-flight requests. Relative paths and control characters are refused. Invalid raw path or color text never blocks other valid changes.
+
+Custom shaders are trusted local GLSL, not a sandbox for arbitrary code. Use a `.frag` file of at most 64 KiB defining `vec4 hyprveil(vec2 uv)`. Available uniforms are `fullSize`, `time`, `tint`, `grainAmount`, `darkness` and `maskColor`. The renderer has no client texture input and forces output alpha to one. A compiler failure keeps the opaque mask color; it never falls back to private window pixels. The Qt preview does not execute custom GLSL and shows that fallback color instead. Choose any built-in preset to clear the custom path. See the [native configuration guide](https://github.com/OBJLAKO/hyprveil/blob/main/docs/CONFIGURATION.md) for the full shader contract and source restrictions.
+
+Custom icons use local PNGs and keep the existing size/opacity controls. A missing or invalid icon renders the crossed-out eye fallback; it does not remove the background mask. Local shader and icon assets must be regular files without symlink components. The controller checks actual file safety and PNG content before changing state; the UI only checks the path syntax. File validation errors are reported as an unconfirmed save and do not retry continuously.
 
 The confirmed native mode and appearance determine the controls. Old
 installation preferences do not override actual native state.

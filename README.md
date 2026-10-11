@@ -35,7 +35,7 @@ You can star the
 ## Install
 
 Requires an Omarchy shell with third-party bar plugins, Python 3, `hyprpm`
-and `hyprctl`. Setup installs **native Hyprveil 0.5.0**, which currently supports
+and `hyprctl`. Setup installs **native Hyprveil 0.6.0**, which currently supports
 **Hyprland 0.56.2 with its reviewed dependency ABI**. Other ABIs are refused.
 
 Add the widget:
@@ -97,12 +97,13 @@ omarchy plugin add https://github.com/OBJLAKO/omarchy-hyprveil.git --enable
 The old directory and helpers remain available. For an older custom or offline
 installation, see the [migration guide](docs/GUIDE.md).
 
-## A small panel, three capture styles
+## A small panel, four capture styles
 
 | Style | Protected window in a compositor capture |
 | :--- | :--- |
 | **Spoiler** | Ten opaque procedural presets, with an optional privacy icon. |
-| **Black** | A plain opaque black mask. |
+| **Color** | An opaque fill, black by default. |
+| **Image** | A local PNG with Fill, Fit, Tile or Stretch sizing. |
 | **Omit** | The window is excluded from capture. |
 
 **Left or middle click:** toggle the focused window's capture privacy.
@@ -111,7 +112,7 @@ effective privacy, including inherited protection; a question mark marks
 unconfirmed state.
 
 Choose Prism, Signal, Aurora, Contour, Radar, Matte, 404, Matrix, Anonymous or Liquid Glass, then tune color, grain,
-speed and darkness. Advanced settings offer an eye, lock or shield with size and icon opacity controls. Changes save automatically; there is no Apply button. Controls stay usable while saving, and the latest choice wins. Matte stays still. Background
+speed and darkness. Advanced settings offer a crossed-out eye, lock, shield or local PNG icon with size and opacity controls. A trusted local shader can replace the built-in pattern; errors keep an opaque color mask. Changes save automatically; there is no Apply button. Controls stay usable while saving, and the latest choice wins. Matte stays still. Background
 checks preserve your edits and follow native changes to other fields. Managed Lua settings
 persist; an independently installed core without managed Lua settings clearly
 marks session-only changes. The UI defaults to **English**, with **Russian** for a Russian

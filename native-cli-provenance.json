@@ -4,15 +4,15 @@
   "files": {
     "native_cli.py": {
       "source": "tools/cli.py",
-      "source_sha256": "4341bc22102b157dd96144a036a56c8f59ade3323ef935eff46c4aee2d556389",
-      "bundled_sha256": "dc2340073c203a3791c5e93919a5ca51cce4f5c5b33bf854da15127bb000b86f"
+      "source_sha256": "17267230887ef40f8a5b1ca711c71b0674f95082bdeb2ad211e0f2cebceb64e8",
+      "bundled_sha256": "dc01501116fcf3e03acd6046d27ec43ebb7b6fc722601b6e68cbf7adae7f1b00"
     },
     "native_service.py": {
       "source": "tools/service.py",
-      "source_sha256": "0472206eeef240558b58ff2912b5f5901b207fcb71bc60ce5c61712356b142a7",
-      "bundled_sha256": "0472206eeef240558b58ff2912b5f5901b207fcb71bc60ce5c61712356b142a7"
+      "source_sha256": "bbeba6db16154978e3b772a5c753079ff33df7ccd1d4082d60740a8f66cc0051",
+      "bundled_sha256": "bbeba6db16154978e3b772a5c753079ff33df7ccd1d4082d60740a8f66cc0051"
     }
   },
-  "source_revision": "7e92c298312cf0e8d7cd930229ac15cda9e9ea27",
-  "version": "0.5.0"
+  "version": "0.6.0",
+  "source_revision": "67c3f910a87b90607b7c7ce6b35ef232f2ebd8a2"
 }

@@ -28,6 +28,8 @@ import native_service as service
 import files
 
 REPOSITORY = "https://github.com/OBJLAKO/hyprveil"
+NATIVE_VERSION = "0.6.0"
+RECEIPT_VERSIONS = ("0.5.0", NATIVE_VERSION)
 BEGIN = "-- BEGIN OMARCHY HYPRVEIL SETUP v1"
 END = "-- END OMARCHY HYPRVEIL SETUP v1"
 BLOCK = BEGIN + '\ndofile(os.getenv("HOME") .. "/.config/hypr/hyprveil-hyprpm.lua")\n' + END
@@ -173,7 +175,7 @@ def ask(question):
 
 def release():
     value = json.loads(files.read_owned(SOURCE / "native-release.json", 8192)[0])
-    if set(value) != {"repository", "revision", "version"} or value["repository"] != REPOSITORY or value["version"] != "0.5.0" or not re.fullmatch(r"[0-9a-f]{40}", value["revision"]):
+    if not isinstance(value, dict) or set(value) != {"repository", "revision", "version"} or value["repository"] != REPOSITORY or value["version"] != NATIVE_VERSION or not isinstance(value["revision"], str) or not re.fullmatch(r"[0-9a-f]{40}", value["revision"]):
         raise files.Refused("invalid reviewed native release pin")
     return value
 
@@ -201,7 +203,7 @@ class Setup:
         if not isinstance(value, dict) or value.get("schema") != 1 or not isinstance(value.get("files"), dict):
             raise files.Refused("unrecognized setup record; left untouched")
         allowed = {str(self.dest / name) for name in HELPERS} | {str(self.bootstrap)}
-        if not isinstance(value.get("native_source"), str) or not isinstance(value.get("native_revision"), str) or type(value.get("native_owned")) is not bool or value.get("version") != "0.5.0" or len(value["native_revision"]) > 256 or (value["native_owned"] and not re.fullmatch(r"[0-9a-f]{40}", value["native_revision"])):
+        if not isinstance(value.get("native_source"), str) or not isinstance(value.get("native_revision"), str) or type(value.get("native_owned")) is not bool or value.get("version") not in RECEIPT_VERSIONS or len(value["native_revision"]) > 256 or (value["native_owned"] and not re.fullmatch(r"[0-9a-f]{40}", value["native_revision"])):
             raise files.Refused("invalid native ownership record")
         if not set(value["files"]).issubset(allowed) or any(not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha) for sha in value["files"].values()) or not isinstance(value.get("block_sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", value["block_sha256"]):
             raise files.Refused("unsafe setup record")
@@ -233,8 +235,9 @@ class Setup:
         state = controller.run("status")
         if state["loaded"]:
             plugins = controller.plugins()
-            if len(plugins) != 1 or plugins[0].get("version") != "0.5.0":
-                raise files.Refused("loaded Hyprveil is not version 0.5.0; complete the cold-login migration before setup")
+            if len(plugins) != 1 or plugins[0].get("version") != NATIVE_VERSION:
+                raise files.Refused("loaded Hyprveil is not version " + NATIVE_VERSION +
+                                    "; stop screen sharing and complete the cold-login migration/rebuild in docs/GUIDE.md before setup")
         return state
 
     def preflight(self):

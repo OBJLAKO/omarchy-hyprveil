@@ -40,5 +40,13 @@ static checks do not constitute marketplace verification or a guarantee of
 capture safety. See the [reviewer notes](docs/REVIEW.md) for the command and
 installation scope.
 
+Optional background/icon PNGs and custom `.frag` paths are local user assets.
+The controller validates their paths; the native renderer independently bounds
+actual reads and PNG dimensions and rejects symlinks, including parent
+components. Invalid shaders fall back to the selected opaque mask color.
+Custom GLSL has no original-window texture input, but it is trusted local code:
+source-size limits do not stop expensive arithmetic or infinite loops from
+stalling the GPU. The panel preview does not execute custom GLSL.
+
 There is no promised response deadline or support for old releases. Use the
 current repository version with the matching native API and compositor ABI.

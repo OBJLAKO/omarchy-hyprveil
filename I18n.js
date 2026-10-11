@@ -1,6 +1,7 @@
 .pragma library
 // Presentation only. No strings enter commands, status parsing or privacy checks.
 var strings = {
+    "native_update_notice": ["New controls need Hyprveil 0.6.0 · Update", "Новые настройки требуют Hyprveil 0.6.0 · Обновить"],
     "autosave_hint": ["Changes save automatically", "Изменения сохраняются автоматически"],
     "autosaving": ["Saving…", "Сохраняем…"],
     "color_invalid": ["Enter a six-digit color", "Введите цвет из шести цифр"],
@@ -63,7 +64,7 @@ var strings = {
         "Контроллер не ответил вовремя. Состояние требует новой проверки."
     ],
     "appearance_failed": [
-        "Could not save appearance. Check Lua settings, then change a value to retry.",
+        "Could not save appearance. Check local files and Lua settings, then change a value to retry.",
         "Не удалось сохранить оформление. Проверьте Lua и измените настройку для повтора."
     ],
     "lua_failed": [
@@ -215,6 +216,28 @@ var strings = {
         "Затемнение"
     ],
     "art_icon_hint": ["This theme has a central motif. Advanced → None removes the overlay icon.", "В этой теме есть центральный рисунок. «Дополнительно» → «Без значка» убирает значок поверх него."],
+    "solid_color": ["Color mask", "Цветная маска"],
+    "legacy_black": ["Black mask (legacy)", "Чёрная маска (прежний режим)"],
+    "color_detail": ["Opaque fill in your chosen color", "Непрозрачная заливка выбранным цветом"],
+    "image_detail": ["Your PNG in captures; placeholder in this preview", "Ваш PNG в захвате; здесь — условное обозначение"],
+    "asset_preview_hint": ["The PNG appears in captures. This preview uses a placeholder.", "PNG появится в захвате. Здесь показано условное обозначение."],
+    "image_path_placeholder": ["/absolute/path/image.png", "/абсолютный/путь/image.png"],
+    "image_path_required": ["Enter an absolute PNG path, then choose Image.", "Введите абсолютный путь к PNG и выберите изображение."],
+    "image_fill": ["Fill", "Заполнить"],
+    "image_fit": ["Fit", "Вписать"],
+    "image_tile": ["Tile", "Плитка"],
+    "image_stretch": ["Stretch", "Растянуть"],
+    "image_fill_hint": ["Cover the window; crop the edges", "Заполнить окно с обрезкой краёв"],
+    "image_fit_hint": ["Keep the whole image; use mask color around it", "Показать целиком; поля залить цветом маски"],
+    "image_tile_hint": ["Repeat the image at its original pixel size", "Повторять изображение в исходном размере"],
+    "image_stretch_hint": ["Stretch to the window size", "Растянуть до размера окна"],
+    "shader_preview": ["Custom shader · fallback preview", "Свой шейдер · цвет заливки при ошибке"],
+    "custom_shader": ["Custom shader", "Свой шейдер"],
+    "shader_path_placeholder": ["Optional /absolute/path/shader.frag", "Необязательно: /абсолютный/путь/shader.frag"],
+    "shader_hint": ["Trusted local .frag. Preview and errors use the mask color. Choose a preset for built-in styles.", "Доверенный .frag. Предпросмотр и ошибки — цвет маски. Выберите тему для встроенного стиля."],
+    "icon_path_placeholder": ["/absolute/path/icon.png", "/абсолютный/путь/icon.png"],
+    "icon_custom": ["PNG", "PNG"],
+    "path_invalid": ["Enter an absolute local file path.", "Введите абсолютный путь к локальному файлу."],
     "privacy_icon": ["Privacy icon", "Значок приватности"],
     "icon_eye": ["Eye", "Глаз"],
     "icon_lock": ["Lock", "Замок"],
@@ -340,8 +363,8 @@ var strings = {
         "\nПКМ — стили и оформление"
     ],
     "spoiler_fallback": [
-        "Spoiler unavailable: using a black mask",
-        "Спойлер недоступен: используется чёрная маска"
+        "Spoiler unavailable: using an opaque mask",
+        "Спойлер недоступен: используется непрозрачная маска"
     ],
     "custom_image": [
         "Custom image",

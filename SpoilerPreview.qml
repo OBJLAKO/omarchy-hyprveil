@@ -6,15 +6,17 @@ Rectangle {
     id: root
     property var appearance: Appearance.defaults()
     property bool animate: false
+    property string customShaderLabel: ""
     readonly property var p: Appearance.parse(appearance) || Appearance.defaults()
     radius: 8
-    color: "#000000"
+    color: root.p.shader_path !== "" ? root.p.mask_color : "#000000"
     border.width: 1
     border.color: "#26303a"
     clip: true
 
     Canvas {
         id: canvas
+        visible: root.p.shader_path === ""
         anchors.fill: parent
         property real phase: 0
         onPhaseChanged: requestPaint()
@@ -196,8 +198,31 @@ Rectangle {
         // Hidden tabs, static thumbnails, speed zero and Matte do no animation work.
         Timer {
             interval: 42; repeat: true
-            running: root.animate && root.p.speed > 0 && root.p.variant !== "matte"
+            running: canvas.visible && root.animate && root.p.speed > 0 && root.p.variant !== "matte"
             onTriggered: canvas.phase = (canvas.phase + Math.PI * 2 * interval / 14000 * root.p.speed / 100) % (Math.PI * 2)
+        }
+    }
+    Text {
+        visible: root.p.shader_path !== "" && root.customShaderLabel !== ""
+        anchors.top: parent.top; anchors.left: parent.left; anchors.margins: 8
+        width: parent.width - 16
+        text: root.customShaderLabel; textFormat: Text.PlainText
+        color: "#ebf0f5"; opacity: 0.75; font.pixelSize: 10
+        elide: Text.ElideRight
+    }
+    Rectangle {
+        objectName: "customIconPlaceholder"
+        anchors.centerIn: parent
+        width: Math.min(root.width * 0.28, 34) * root.p.eye_size / 80; height: width
+        visible: root.p.eye && root.p.icon === "custom"
+        color: "transparent"; radius: Math.max(2, width * 0.12)
+        border.width: 1; border.color: "#ebf0f5"
+        opacity: root.p.icon_opacity / 100
+        // A file marker, never a decoder for an unvalidated local user path.
+        Text {
+            anchors.centerIn: parent
+            text: "PNG"; textFormat: Text.PlainText; color: "#ebf0f5"
+            font.pixelSize: Math.max(6, parent.width * 0.26)
         }
     }
     PrivacyIcon {
@@ -205,8 +230,8 @@ Rectangle {
         width: Math.min(root.width * 0.28, 34) * root.p.eye_size / 80
         height: width
         kind: root.p.icon
+        visible: root.p.eye && root.p.icon !== "none" && root.p.icon !== "custom"
         ink: "#ebf0f5"
         opacity: root.p.icon_opacity / 100
-        visible: root.p.eye && root.p.icon !== "none"
     }
 }

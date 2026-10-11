@@ -15,22 +15,54 @@ Column {
     property bool saving: false
     property bool animate: false
     property bool advanced: false
+    property bool assetsSupported: false
     property string mode: "spoiler"
+    property bool customIconEditor: false
     property color foreground: Color.popups.text
     property string fontFamily: "Adwaita Sans"
     readonly property bool colorValid: hex.acceptableInput
+    readonly property bool pathsValid: Appearance.validPath(shaderPath.text, true) && Appearance.validPath(iconPath.text, false)
     signal edited(string key, var value)
     signal editedPatch(var patch)
     signal variantPicked(string variant)
+    signal builtinIconPicked(string icon)
     signal resetRequested()
     signal closeRequested()
     function syncColor() { hex.text = draft.color }
+    function commitPaths() { if (assetsSupported) { shaderPath.commit(); iconPath.commit() } }
+    function pickBuiltin(variant) {
+        shaderPath.discard("")
+        editedPatch(assetsSupported ? {variant: variant, shader_path: ""} : {variant: variant})
+    }
     onDraftChanged: {
         if (!hex.activeFocus) syncColor()
     }
     Keys.onEscapePressed: closeRequested()
     spacing: Style.space(12)
 
+    component LocalPath: TextField {
+        id: pathField
+        property string savedValue: ""
+        property bool shader: false
+        property bool changedByUser: false
+        signal committed(string path)
+        maximumLength: 4096
+        font.family: root.fontFamily; font.pixelSize: Style.space(11)
+        foreground: changedByUser && !Appearance.validPath(text, shader) ? Color.urgent : root.foreground
+        text: savedValue
+        onSavedValueChanged: if (!activeFocus && !changedByUser) text = savedValue
+        onTextEdited: changedByUser = true
+        function discard(value) { changedByUser = false; text = value }
+        function commit() {
+            if (!changedByUser) return
+            if (Appearance.validPath(text, shader)) {
+                changedByUser = false
+                committed(text)
+            }
+        }
+        onAccepted: commit()
+        onEditingFinished: { commit(); if (!changedByUser) text = savedValue }
+    }
     component Adjustment: Item {
         id: adjustment
         property string caption: ""
@@ -66,7 +98,7 @@ Column {
             onMoved: function(next) { adjustment.forceActiveFocus(); adjustment.edited(Math.round(next)) }
         }
     }
-    SpoilerPreview { width: parent.width; height: Style.space(118); appearance: root.draft; animate: root.animate; radius: Style.space(10) }
+    SpoilerPreview { width: parent.width; height: Style.space(118); appearance: root.draft; customShaderLabel: root.tr("shader_preview"); animate: root.animate; radius: Style.space(10) }
     Grid {
         width: parent.width; columns: 5; spacing: Style.space(7)
         Repeater {
@@ -74,7 +106,7 @@ Column {
             delegate: Rectangle {
                 id: preset
                 required property string modelData
-                readonly property bool selected: root.draft.variant === modelData
+                readonly property bool selected: root.draft.shader_path === "" && root.draft.variant === modelData
                 width: (parent.width - parent.spacing * (parent.columns - 1)) / parent.columns
                 height: Style.space(68)
                 radius: Style.space(7)
@@ -86,7 +118,7 @@ Column {
                 activeFocusOnTab: true
                 Accessible.role: Accessible.Button
                 Accessible.name: root.tr(modelData)
-                function pick() { root.variantPicked(modelData) }
+                function pick() { root.pickBuiltin(modelData) }
                 Keys.onSpacePressed: pick()
                 Keys.onReturnPressed: pick()
                 Rectangle {
@@ -134,6 +166,7 @@ Column {
         }
         TextField {
             id: hex
+            objectName: "spoilerColor"
             width: Math.max(Style.space(86), parent.width - Style.space(198))
             font.family: root.fontFamily; font.pixelSize: Style.space(11)
             text: root.draft.color; maximumLength: 7; placeholderText: "#ffffff"
@@ -164,16 +197,39 @@ Column {
                 model: Appearance.icons
                 delegate: Button {
                     required property string modelData
-                    width: (parent.width - parent.spacing * 3) / 4
+                    width: (parent.width - parent.spacing * (Appearance.icons.length - 1)) / Appearance.icons.length
                     text: root.tr("icon_" + modelData)
-                    tooltipText: (root.draft.variant === "error404" || root.draft.variant === "anonymous") && modelData !== "none" ? root.tr("art_icon_hint") : ""
+                    tooltipText: modelData === "custom" ? root.tr("asset_preview_hint") : (root.draft.variant === "error404" || root.draft.variant === "anonymous") && modelData !== "none" ? root.tr("art_icon_hint") : ""
                     selected: (root.draft.eye ? root.draft.icon : "none") === modelData
-                    bordered: true; focusable: true; enabled: !root.busy
+                    bordered: true; focusable: true; enabled: !root.busy && (root.assetsSupported || modelData !== "custom")
                     fontFamily: root.fontFamily; fontSize: Style.space(11)
                     onClicked: {
-                        root.editedPatch({icon: modelData, eye: modelData !== "none"})
+                        root.customIconEditor = modelData === "custom"
+                        if (modelData === "custom") {
+                            if (iconPath.changedByUser && !Appearance.validPath(iconPath.text, false)) return
+                            iconPath.commit()
+                        } else {
+                            root.builtinIconPicked(modelData)
+                            iconPath.discard(root.draft.icon_path)
+                            return
+                        }
+                        if (root.draft.icon_path !== "")
+                            root.editedPatch({icon: modelData, eye: modelData !== "none"})
                     }
                 }
+            }
+        }
+        LocalPath {
+            id: iconPath
+            objectName: "customIconPath"
+            width: parent.width
+            visible: root.customIconEditor || root.draft.icon === "custom"
+            enabled: root.assetsSupported && !root.busy
+            savedValue: root.draft.icon_path
+            placeholderText: root.tr("icon_path_placeholder")
+            onCommitted: function(path) {
+                if (path !== "") root.editedPatch({icon: "custom", icon_path: path, eye: true})
+                else root.editedPatch({icon: "eye", icon_path: "", eye: true})
             }
         }
         Adjustment {
@@ -186,6 +242,22 @@ Column {
             enabled: root.draft.eye && root.draft.icon !== "none"
             onEdited: function(next) { root.edited("icon_opacity", next) }
         }
+        Text { text: root.tr("custom_shader"); textFormat: Text.PlainText; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.space(12) }
+        LocalPath {
+            id: shaderPath
+            objectName: "customShaderPath"
+            width: parent.width
+            savedValue: root.draft.shader_path
+            enabled: root.assetsSupported && !root.busy
+            shader: true
+            placeholderText: root.tr("shader_path_placeholder")
+            onCommitted: function(path) { root.edited("shader_path", path) }
+        }
+        Text {
+            width: parent.width; height: Style.space(32)
+            text: root.tr("shader_hint"); textFormat: Text.PlainText; color: Color.muted
+            font.family: root.fontFamily; font.pixelSize: Style.space(11); wrapMode: Text.WordWrap
+        }
     }
     Row {
         width: parent.width; spacing: Style.space(8)
@@ -193,7 +265,7 @@ Column {
             width: (parent.width - parent.spacing) * 0.56
             height: Style.space(31)
             verticalAlignment: Text.AlignVCenter
-            text: !root.colorValid ? root.tr("color_invalid") : root.saving ? root.tr("autosaving") : root.tr("autosave_hint")
+            text: !root.colorValid ? root.tr("color_invalid") : !root.pathsValid ? root.tr("path_invalid") : root.saving ? root.tr("autosaving") : root.tr("autosave_hint")
             textFormat: Text.PlainText; color: Color.muted
             font.family: root.fontFamily; font.pixelSize: Style.space(11)
             wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight

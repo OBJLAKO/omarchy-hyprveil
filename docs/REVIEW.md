@@ -11,7 +11,7 @@ Hyprpm-built artifact; it contains no second capture implementation.
 ## Dependencies and installation scope
 
 The widget requires Omarchy's plugin framework, Quickshell, Python 3,
-`/usr/bin/hyprctl`, Hyprpm and native Hyprveil 0.5.0. The core enforces its
+`/usr/bin/hyprctl`, Hyprpm and native Hyprveil 0.6.0. The core enforces its
 reviewed compositor ABI before accessing internal objects. This repository
 bundles its receipt-free API controller and service module;
 `native-cli-provenance.json` records source/output hashes. The only source
@@ -27,7 +27,7 @@ appropriate while this explicit terminal setup is required; this update does
 not request its removal.
 
 `tools/setup.py` fetches the exact native commit in `native-release.json`
-(`f575f3b757d5b959f0d3e638cf6d98b5a1d0301a`, version 0.5.0), verifies a clean
+(the file records the full revision and native version), verifies a clean
 checkout and delegates build/cache registration to Hyprpm. Missing Arch build
 tools can require `sudo pacman`; Hyprpm headers/cache can also require privilege.
 Header updates get separate consent because `hyprpm update` may rebuild all
@@ -110,7 +110,17 @@ while retaining newer edits. Icon shape and visibility are edited atomically.
 Configure keeps the confirmed mode and editor geometry in place and leaves
 inputs usable. Closing the panel flushes valid pending changes and completes a
 bounded background acknowledgement; a failed save stays latched until a new
-edit. Invalid raw color text never enters the pending native patch.
+edit. Invalid raw color or path text never enters the pending native patch. Local asset paths commit only on Enter/blur, with the same per-field revisions and closed-panel acknowledgement. The UI validates and retains only the five named renderer settings from matching outer/native status; the controller’s appearance envelope remains nine fields. Mask color is independent of the Spoiler accent. Custom GLSL is never run by the Qt preview; it shows the documented opaque color fallback.
+New asset controls require all four rendering fields explicitly confirmed by
+the loaded native module. Client defaults cannot grant that capability. With
+native 0.5.0, the panel keeps Black, Image, built-in styles, icons and reset;
+Image omits the new fit option, and appearance patches omit the new fields.
+Appearance reset preserves the PNG, its sizing and the background mask color.
+Qt previews never open user PNG paths, including an unconfirmed draft. Image
+and custom icon previews use synthetic PNG markers; only the fixed packaged
+preset images enter Qt's decoder. Choosing a built-in icon removes an
+unconfirmed custom path from the pending patch while retaining the native
+acknowledged path without resending it.
 
 The watcher binds to one owned runtime and compositor instance and validates its
 socket/process identity. Socket events serve as bounded wakeups; their titles
@@ -139,9 +149,15 @@ processes; fixed arguments and validation do not provide an OS sandbox.
 Unit checks cover widget installation and first-click setup preservation,
 refusals and failure recovery; watcher admission and bounded output; identity
 checks; configuration state; and executable Lua fixtures. Synthetic QML checks
-exercise panel behavior, ten presets, four icon choices, failed startup,
+exercise panel behavior, ten presets, five icon choices including a local PNG, path commit/cancellation and rapid queued edits, failed startup,
 SIGTERM-resistant children and oversized output without delimiters. They do
 not demonstrate native renderer safety on another compositor build.
+The 2026-10-11 frontend run passed 22 JavaScript checks, 26 actual QML autosave
+scenarios, 11 subprocess failure scenarios and three QML smoke configurations.
+The autosave cases include legacy native capability gating and image-mode
+reset, a real FIFO named as a PNG which never enters a Qt image source, and
+recovery from a rejected custom icon, with stable imported sources and no owned
+child processes left running.
 
 Setup checks use temporary homes and synthetic manager/activation commands;
 they do not claim a live privileged Hyprpm cache installation or a cold-login

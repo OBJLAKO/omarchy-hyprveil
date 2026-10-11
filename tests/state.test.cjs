@@ -11,8 +11,12 @@ const model = vm.createContext({Appearance: appearance, I18n: i18n});
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'State.js'), 'utf8').replace(/^\.import[^\n]*\n/gm, ''), model);
 const parse = value => JSON.parse(JSON.stringify(model.parse(typeof value === 'string' ? value : JSON.stringify(value))));
 const defaults = () => JSON.parse(JSON.stringify(appearance.defaults()));
-const sample = mode => ({enabled: true, loaded: true, desired_mode: mode, appearance: defaults(),
-    status: {session: 'live', local_dump: 'disabled-in-live', mode, spoiler_status: 'ready', appearance: defaults()}});
+const sample = mode => {
+    const full = defaults(), base = Object.fromEntries(appearance.baseFields.map(key => [key, full[key]]));
+    const extras = Object.fromEntries(appearance.extraFields.map(key => [key, full[key]]));
+    return {enabled: true, loaded: true, desired_mode: mode, appearance: {...base}, ...extras,
+        status: {session: 'live', local_dump: 'disabled-in-live', mode, spoiler_status: 'ready', appearance: {...base}, ...extras}};
+};
 let count = 0;
 function test(name, fn) { fn(); console.log('ok', ++count, name); }
 test('autosave patches validate atomically and send only edited fields', () => {
@@ -32,7 +36,7 @@ test('autosave patches validate atomically and send only edited fields', () => {
     assert.equal(before.eye, false, 'atomic merge must not mutate the previous draft');
 });
 test('all live modes require attested status', () => {
-    for (const mode of ['omit', 'black', 'spoiler', 'image']) {
+    for (const mode of ['omit', 'black', 'color', 'spoiler', 'image']) {
         const state = parse(sample(mode));
         assert.equal(state.known, true);
         assert.equal(state.loaded, true);
@@ -41,7 +45,7 @@ test('all live modes require attested status', () => {
 });
 test('native status is a known unloaded state', () => {
     assert.deepEqual(parse({enabled: true, loaded: false, desired_mode: 'black', status: null, appearance: defaults()}),
-        {known: true, loaded: false, enabled: true, loadSupported: true, persistenceSupported: true,
+        {known: true, loaded: false, enabled: true, loadSupported: true, persistenceSupported: true, assetsSupported: false,
             mode: 'native', desiredMode: 'black', spoilerFallback: false, appearance: defaults()});
 });
 test('Hyprpm ownership disables legacy load actions and exposes runtime-only settings', () => {
@@ -54,15 +58,71 @@ test('Hyprpm ownership disables legacy load actions and exposes runtime-only set
     for (const key of ['load_supported', 'persistence_supported'])
         for (const value of [null, 'true', 1, {}]) assert.equal(parse({...sample('spoiler'), [key]: value}).known, false);
 });
-test('spoiler allocation failure honestly reports safe black fallback', () => {
+test('new asset controls require all four explicit agreeing native fields', () => {
+    const raw = sample('spoiler');
+    assert.equal(parse(raw).assetsSupported, true);
+    for (const key of model.assetFields) {
+        const oldNative = structuredClone(raw); delete oldNative.status[key];
+        assert.equal(parse(oldNative).known, true, key);
+        assert.equal(parse(oldNative).assetsSupported, false, 'client defaults do not prove native support: ' + key);
+        const missingClient = structuredClone(raw); delete missingClient[key];
+        assert.equal(parse(missingClient).assetsSupported, false, key);
+    }
+    const legacy = structuredClone(raw);
+    for (const key of model.assetFields) delete legacy.status[key];
+    const state = parse(legacy);
+    assert.equal(state.known, true);
+    assert.equal(state.assetsSupported, false);
+    assert.equal(model.allowed('color', state), false);
+    for (const action of ['black', 'image', 'spoiler', 'omit', 'reload-config']) assert.equal(model.allowed(action, state), true);
+    assert.equal(parse({loaded: false, enabled: false, desired_mode: 'black', appearance: defaults(), status: null}).assetsSupported, false);
+    assert.equal(parse('invalid').assetsSupported, false);
+});
+test('legacy image commands omit new fit options and retain black instead of color', () => {
+    const raw = sample('black'), value = {...defaults(), image_path: '/tmp/chosen image.png', image_fit: 'tile'};
+    const modern = parse(raw);
+    assert.deepEqual(Array.from(model.command('image', modern, value)), ['image', value.image_path, '--fit', 'tile']);
+    for (const key of model.assetFields) delete raw.status[key];
+    const legacy = parse(raw);
+    assert.deepEqual(Array.from(model.command('image', legacy, value)), ['image', value.image_path]);
+    assert.deepEqual(Array.from(model.command('black', legacy, value)), ['black']);
+    assert.deepEqual(Array.from(model.command('color', legacy, value)), []);
+    assert.deepEqual(Array.from(model.command('image', legacy, defaults())), []);
+    assert.deepEqual(Array.from(model.command('image', model.unknown(), value)), []);
+});
+test('built-in and custom spoiler failures honestly report an opaque fallback', () => {
     const raw = sample('spoiler');
     raw.status.spoiler_status = 'black-fallback';
     const state = parse(raw);
     assert.equal(state.known, true);
     assert.equal(state.spoilerFallback, true);
-    assert.equal(model.label(state.mode, state.spoilerFallback), 'Spoiler unavailable: using a black mask');
+    assert.equal(model.label(state.mode, state.spoilerFallback), 'Spoiler unavailable: using an opaque mask');
+    raw.status.spoiler_status = 'custom-ready';
+    assert.equal(parse(raw).known, true);
+    assert.equal(parse(raw).spoilerFallback, false);
+    raw.status.spoiler_status = 'color-fallback';
+    assert.equal(parse(raw).known, true);
+    assert.equal(parse(raw).spoilerFallback, true);
     raw.status.spoiler_status = 'unknown';
     assert.equal(parse(raw).known, false);
+});
+test('a configured shader pending its first capture remains an attested healthy state', () => {
+    const raw = sample('spoiler');
+    for (const key of appearance.extraFields) {
+        raw[key] = defaults()[key]; raw.status[key] = defaults()[key];
+        delete raw.appearance[key]; delete raw.status.appearance[key];
+    }
+    raw.shader_path = raw.status.shader_path = '/tmp/trusted pending.frag';
+    raw.status.spoiler_status = 'pending';
+    const state = parse(raw);
+    assert.equal(state.known, true);
+    assert.equal(state.loaded, true);
+    assert.equal(state.spoilerFallback, false);
+    assert.equal(state.appearance.shader_path, '/tmp/trusted pending.frag');
+    assert.equal(model.label(state.mode, state.spoilerFallback), 'Spoiler');
+    assert.equal(model.allowed('color', state), true);
+    raw.status.shader_path = '/tmp/different.frag';
+    assert.equal(parse(raw).known, false, 'pending never bypasses renderer field agreement');
 });
 test('bad JSON, huge output and wrong shape cannot grant actions', () => {
     for (const raw of ['', '{', 'null', '[]', 'true', '"spoiler"', ' '.repeat(32769), {},
@@ -85,8 +145,8 @@ test('arbitrary future fields are not retained or displayed', () => {
 });
 test('only allowlisted actions can be dispatched', () => {
     const live = parse(sample('spoiler'));
-    for (const action of ['black', 'omit', 'spoiler', 'reload-config']) assert.equal(model.allowed(action, live), true);
-    for (const action of ['stop', 'start', 'enable', 'image', 'disable', 'sh', 'spoiler;true', '__proto__']) assert.equal(model.allowed(action, live), false);
+    for (const action of ['black', 'color', 'image', 'omit', 'spoiler', 'reload-config']) assert.equal(model.allowed(action, live), true);
+    for (const action of ['stop', 'start', 'enable', 'disable', 'sh', 'spoiler;true', '__proto__']) assert.equal(model.allowed(action, live), false);
     const native = parse({enabled: false, loaded: false, desired_mode: 'spoiler', status: null, appearance: defaults()});
     for (const action of ['start', 'enable']) assert.equal(model.allowed(action, native), true);
     for (const action of ['black', 'omit', 'spoiler', 'reload-config', 'stop']) assert.equal(model.allowed(action, native), false);
@@ -234,7 +294,7 @@ test('appearance is exact, canonical, bounded and cannot carry opacity or comman
         assert.equal(appearance.update(defaults(), 'icon', icon).icon, icon);
     assert.equal(appearance.parse({...defaults(), icon: 'svg'}), null);
     assert.equal(appearance.parse({...defaults(), icon_opacity: undefined}), null);
-    const legacy = {...defaults()}; delete legacy.icon; delete legacy.icon_opacity;
+    const legacy = {...defaults()}; for (const key of [...appearance.extraFields, 'icon', 'icon_opacity']) delete legacy[key];
     assert.equal(appearance.parse(legacy).icon, 'eye');
     assert.equal(appearance.parse(legacy).icon_opacity, 75);
     assert.equal(appearance.update(defaults(), 'color', '#AABBCD').color, '#aabbcd');
@@ -242,7 +302,55 @@ test('appearance is exact, canonical, bounded and cannot carry opacity or comman
     const changed = appearance.update(defaults(), 'variant', 'signal');
     assert.equal(changed.grain, 50); assert.equal(changed.speed, 100); assert.equal(changed.eye_size, 80);
     assert.deepEqual(JSON.parse(JSON.stringify(appearance.command(changed))), ['configure', '--variant', 'signal', '--color', '#ffffff',
-        '--grain', '50', '--speed', '100', '--darkness', '50', '--eye', 'on', '--eye-size', '80', '--icon', 'eye', '--icon-opacity', '75']);
+        '--grain', '50', '--speed', '100', '--darkness', '50', '--eye', 'on', '--eye-size', '80', '--icon', 'eye', '--icon-opacity', '75', '--mask-color', '#000000', '--image-fit', 'stretch', '--shader-path', '', '--icon-path', '', '--image-path', '']);
+});
+test('new render controls stay separate, bounded and compatible with old appearance envelopes', () => {
+    const old = defaults();
+    for (const key of appearance.extraFields) delete old[key];
+    const parsed = appearance.parse(old);
+    assert.equal(parsed.color, '#ffffff');
+    assert.equal(parsed.mask_color, '#000000');
+    assert.equal(parsed.image_fit, 'stretch');
+    for (const fit of ['fill', 'fit', 'tile', 'stretch'])
+        assert.equal(appearance.update(defaults(), 'image_fit', fit).image_fit, fit);
+    for (const fit of ['cover', 'contain', null, true, 'fit;sh'])
+        assert.equal(appearance.update(defaults(), 'image_fit', fit), null);
+    const paths = {shader_path: '/tmp/local shader.FRAG', icon_path: '/tmp/icon with # and ?.png', image_path: '/tmp/image'};
+    const extended = appearance.updateMany(defaults(), {...paths, mask_color: '#ABCDEF', icon: 'custom'});
+    assert.equal(extended.mask_color, '#abcdef');
+    assert.equal(extended.color, '#ffffff');
+    assert.deepEqual(JSON.parse(JSON.stringify(appearance.command(extended, ['mask_color', 'shader_path', 'icon_path', 'image_fit', 'image_path']))),
+        ['configure', '--mask-color', '#abcdef', '--shader-path', paths.shader_path, '--icon-path', paths.icon_path, '--image-fit', 'stretch', '--image-path', paths.image_path]);
+    assert.equal(appearance.localUrl(paths.icon_path), 'file:///tmp/icon%20with%20%23%20and%20%3F.png');
+    for (const value of [null, 5, 'relative.png', '/tmp/a\n.png', '/tmp/a\0.png', '/' + 'é'.repeat(2048), '/tmp/\ud800.png']) {
+        assert.equal(appearance.validPath(value, false), false, String(value));
+        assert.equal(appearance.update(defaults(), 'icon_path', value), null);
+    }
+    assert.equal(appearance.validPath('/' + 'é'.repeat(2047), false), true);
+    assert.equal(appearance.validPath('/tmp/shader.glsl', true), false);
+    assert.equal(appearance.update(defaults(), 'mask_color', '#fff'), null);
+    assert.equal(appearance.parse({...old, mask_color: '#000000'}), null, 'partial unknown native schema is not silently accepted');
+});
+test('top-level render controls require agreement and preserve the legacy black mode', () => {
+    const raw = sample('color');
+    for (const key of appearance.extraFields) {
+        raw[key] = defaults()[key]; raw.status[key] = defaults()[key];
+        delete raw.appearance[key]; delete raw.status.appearance[key];
+    }
+    raw.mask_color = raw.status.mask_color = '#224466';
+    raw.image_path = raw.status.image_path = '/tmp/chosen.png';
+    assert.equal(parse(raw).appearance.mask_color, '#224466');
+    assert.equal(parse(raw).appearance.color, '#ffffff');
+    assert.equal(parse(raw).mode, 'color');
+    assert.equal(parse(sample('black')).mode, 'black');
+    assert.equal(model.label('black', false), 'Black mask (legacy)');
+    assert.equal(model.label('color', false), 'Color mask');
+    for (const key of appearance.extraFields) {
+        const bad = structuredClone(raw); bad.status[key] = key === 'mask_color' ? '#000001' : 'wrong';
+        assert.equal(parse(bad).known, false, key);
+    }
+    for (const [key, value] of [['mask_color', '#FFF'], ['image_fit', 'cover'], ['shader_path', 'relative.frag'], ['icon_path', '/tmp/a\n.png']])
+        assert.equal(parse({...raw, [key]: value, status: {...raw.status, [key]: value}}).known, false, key);
 });
 test('controller and native appearance must match before UI reports healthy status', () => {
     const raw = sample('spoiler');
@@ -269,7 +377,7 @@ test('English is the fallback and Russian locales select complete presentation t
     }
     assert.equal(i18n.selectLanguage('en', 'ru_RU'), 'en');
     assert.equal(i18n.selectLanguage('ru', 'en_US'), 'ru');
-    assert.equal(model.label('spoiler', true, 'ru_RU'), 'Спойлер недоступен: используется чёрная маска');
+    assert.equal(model.label('spoiler', true, 'ru_RU'), 'Спойлер недоступен: используется непрозрачная маска');
     assert.equal(model.label('__proto__', false), 'State unconfirmed');
 });
 test('localization is complete and leaves native parsing and command data untouched', () => {

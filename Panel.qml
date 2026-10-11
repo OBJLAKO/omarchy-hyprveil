@@ -153,16 +153,34 @@ Ui.Panel {
     }
     function act(action, alreadyRequested) {
         if ((!opened && alreadyRequested !== true) || !State.allowed(action, current)) return
+        if (action === "image") {
+            imagePath.commit()
+            if (imagePath.changedByUser) {
+                message = root.tr("path_invalid")
+                return
+            }
+        }
         if (acting && actionName === "configure") { queuedAction = action; return }
         if (busy) return
         if (querying) { queuedAction = action; return }
-        beginAction(action, [action])
+        if (action === "image") {
+            if (appearanceDraft.image_path === "") {
+                message = root.tr("image_path_required")
+                Qt.callLater(function() { imagePath.forceActiveFocus() })
+                return
+            }
+        }
+        beginAction(action, State.command(action, current, appearanceDraft))
     }
     function editAppearance(key, value) {
         var patch = {}; patch[key] = value
         editAppearancePatch(patch)
     }
     function editAppearancePatch(patch, force) {
+        if (!current.assetsSupported) {
+            for (var field in patch)
+                if (State.assetFields.indexOf(field) >= 0 || (field === "icon" && patch[field] === "custom")) return
+        }
         var next = Appearance.updateMany(appearanceDraft, patch)
         if (!next) return
         var fields = Object.keys(patch), changed = false
@@ -205,8 +223,21 @@ Ui.Panel {
         beginAction("configure", Appearance.command(submittedAppearance, Object.keys(submittedFields)))
     }
     function resetAppearance() {
-        editAppearancePatch(Appearance.defaults(), true)
+        var defaults = Appearance.defaults(), patch = {}
+        var resetFields = current.assetsSupported ? Appearance.baseFields.concat(["shader_path", "icon_path"]) : Appearance.baseFields
+        for (var i = 0; i < resetFields.length; ++i) patch[resetFields[i]] = defaults[resetFields[i]]
+        editAppearancePatch(patch, true)
         editor.syncColor()
+    }
+    function pickBuiltinIcon(icon) {
+        // A rejected custom path must not poison the next built-in request.
+        // Keep the native acknowledged path without resending or opening it.
+        var edits = Object.assign({}, appearanceEdits)
+        delete edits.icon_path
+        appearanceEdits = edits
+        appearanceDraft = Appearance.update(appearanceDraft, "icon_path", current.appearance.icon_path)
+        appearanceDirty = Object.keys(edits).length > 0
+        editAppearancePatch({icon: icon, eye: icon !== "none"})
     }
     function setTab(next) {
         if (["hide", "customize"].indexOf(next) < 0) return
@@ -246,7 +277,7 @@ Ui.Panel {
     }
     function options() {
         if (!current.known) return ["refresh"]
-        return current.loaded ? ["spoiler", "omit", "black", "reset", "refresh", "reload-config", "customize"]
+        return current.loaded ? ["spoiler", "omit", current.assetsSupported ? "color" : "black", "image", "reset", "refresh", "reload-config", "customize"]
                               : current.loadSupported ? [current.enabled ? "start" : "enable", "refresh"] : ["refresh"]
     }
     function moveCursor(delta) {
@@ -256,7 +287,7 @@ Ui.Panel {
     }
     function scrollCursor() {
         var action = options()[Math.min(cursor, options().length - 1)]
-        var targets = { black: blackRow, omit: omitRow, spoiler: spoilerRow,
+        var targets = { black: colorRow, color: colorRow, image: imageRow, omit: omitRow, spoiler: spoilerRow,
                         reset: resetButton, start: loadButton, enable: loadButton, refresh: refreshButton, "reload-config": reloadLuaButton, customize: customTab }
         var target = targets[action]
         if (!target) return
@@ -284,6 +315,8 @@ Ui.Panel {
         } else {
             // A click already authorized these edits. Closing the popout does
             // not cancel its last value or require another open to confirm it.
+            editor.commitPaths()
+            imagePath.commit()
             if (!editor.colorValid) editor.syncColor()
             appearanceAutosave.stop()
             Qt.callLater(flushAppearance)
@@ -450,7 +483,7 @@ Ui.Panel {
                                 anchors.centerIn: parent
                                 text: root.acting && root.actionName !== "configure" ? root.tr("changing") : root.querying && root.queryManual ? root.tr("checking_short") : !root.current.known ? (!root.statusChecked && root.querying ? root.tr("checking_short") : root.tr("offline"))
                                     : root.current.mode === "spoiler" ? root.tr("spoiler") : root.current.mode === "omit" ? root.tr("hidden_short")
-                                    : root.current.mode === "black" ? root.tr("mask_short") : root.current.loaded ? root.tr("image_short") : root.tr("unloaded_short")
+                                    : (root.current.mode === "black" || root.current.mode === "color") ? root.tr("mask_short") : root.current.loaded ? root.tr("image_short") : root.tr("unloaded_short")
                                 textFormat: Text.PlainText
                                 color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.62)
                                 font.family: root.fontFamily
@@ -503,6 +536,15 @@ Ui.Panel {
                             onClicked: root.setTab("customize")
                         }
                     }
+                    Button {
+                        objectName: "nativeUpdateNotice"
+                        width: parent.width
+                        visible: root.current.known && root.current.loaded && !root.current.assetsSupported
+                        text: root.tr("native_update_notice")
+                        leftAlign: true; background: "transparent"; foreground: Color.muted
+                        fontFamily: root.fontFamily; fontSize: Style.space(11)
+                        onClicked: Qt.openUrlExternally("https://github.com/OBJLAKO/omarchy-hyprveil/blob/main/docs/GUIDE.md#update-and-remove")
+                    }
                     Text {
                         width: parent.width
                         visible: root.current.spoilerFallback
@@ -521,7 +563,7 @@ Ui.Panel {
                     StyleRow {
                         id: spoilerRow
                         title: root.tr("spoiler")
-                        detail: root.tr("spoiler_detail")
+                        detail: root.current.appearance.shader_path !== "" ? root.tr("custom_shader") : root.tr("spoiler_detail")
                         mode: "spoiler"
                         appearance: root.current.appearance
                         animate: root.opened && root.tab === "hide"
@@ -545,16 +587,96 @@ Ui.Panel {
                         onPicked: root.act(mode)
                     }
                     StyleRow {
-                        id: blackRow
-                        title: root.tr("black")
-                        detail: root.tr("black_detail")
-                        mode: "black"
+                        id: colorRow
+                        title: root.tr(root.current.assetsSupported ? "solid_color" : "black")
+                        detail: root.tr(root.current.assetsSupported ? "color_detail" : "black_detail")
+                        mode: root.current.assetsSupported ? "color" : "black"
+                        appearance: root.appearanceDraft
                         selected: root.current.loaded && root.current.mode === mode
                         enabled: root.current.known && root.current.loaded && !root.busy
                         hasCursor: root.cursor === 2 && root.current.loaded
                         fontFamily: root.fontFamily
                         onHovered: root.cursor = 2
                         onPicked: root.act(mode)
+                    }
+                    Row {
+                        width: parent.width; spacing: Style.space(8)
+                        Repeater {
+                            model: ["#000000", "#243047", "#526153", "#674650", "#b8b8b8"]
+                            delegate: Rectangle {
+                                required property string modelData
+                                width: Style.space(23); height: width; radius: width / 2
+                                anchors.verticalCenter: parent.verticalCenter; color: modelData
+                                border.width: root.appearanceDraft.mask_color === modelData || activeFocus ? 2 : 1
+                                border.color: root.appearanceDraft.mask_color === modelData ? Color.accent : "#4b535b"
+                                activeFocusOnTab: true
+                                enabled: root.current.assetsSupported && (!root.acting || root.actionName === "configure")
+                                function pick() { root.editAppearance("mask_color", modelData); maskHex.text = modelData }
+                                Keys.onSpacePressed: pick()
+                                Keys.onReturnPressed: pick()
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.pick() }
+                            }
+                        }
+                        TextField {
+                            id: maskHex
+                            objectName: "maskColor"
+                            width: parent.width - Style.space(155)
+                            text: root.appearanceDraft.mask_color; maximumLength: 7; placeholderText: "#000000"
+                            font.family: root.fontFamily; font.pixelSize: Style.space(11)
+                            validator: RegularExpressionValidator { regularExpression: /#[0-9a-fA-F]{6}/ }
+                            enabled: root.current.assetsSupported && (!root.acting || root.actionName === "configure")
+                            onTextEdited: if (acceptableInput) root.editAppearance("mask_color", text.toLowerCase())
+                            onActiveFocusChanged: if (!activeFocus) text = root.appearanceDraft.mask_color
+                            Connections { target: root; function onAppearanceDraftChanged() { if (!maskHex.activeFocus) maskHex.text = root.appearanceDraft.mask_color } }
+                        }
+                    }
+                    StyleRow {
+                        id: imageRow
+                        title: root.tr("custom_image")
+                        detail: root.tr("image_detail")
+                        mode: "image"
+                        appearance: root.appearanceDraft
+                        selected: root.current.loaded && root.current.mode === mode
+                        enabled: root.current.known && root.current.loaded && !root.busy
+                        hasCursor: root.cursor === 3 && root.current.loaded
+                        fontFamily: root.fontFamily
+                        onHovered: root.cursor = 3
+                        onPicked: root.act(mode)
+                    }
+                    TextField {
+                        id: imagePath
+                        objectName: "imagePath"
+                        property bool changedByUser: false
+                        width: parent.width; maximumLength: 4096
+                        foreground: changedByUser && !Appearance.validPath(text, false) ? Color.urgent : root.foreground
+                        text: root.appearanceDraft.image_path; placeholderText: root.tr("image_path_placeholder")
+                        font.family: root.fontFamily; font.pixelSize: Style.space(11)
+                        enabled: root.current.known && root.current.loaded && (!root.acting || root.actionName === "configure")
+                        onTextEdited: changedByUser = true
+                        function commit() {
+                            if (!changedByUser || !Appearance.validPath(text, false)) return
+                            changedByUser = false
+                            root.editAppearance("image_path", text)
+                        }
+                        onAccepted: commit()
+                        onEditingFinished: { commit(); if (!changedByUser) text = root.appearanceDraft.image_path }
+                        Connections { target: root; function onAppearanceDraftChanged() { if (!imagePath.activeFocus && !imagePath.changedByUser) imagePath.text = root.appearanceDraft.image_path } }
+                    }
+                    Row {
+                        width: parent.width; spacing: Style.space(5)
+                        Repeater {
+                            model: Appearance.imageFits
+                            delegate: Button {
+                                required property string modelData
+                                width: (parent.width - parent.spacing * 3) / 4
+                                text: root.tr("image_" + modelData)
+                                tooltipText: root.tr("image_" + modelData + "_hint")
+                                selected: root.appearanceDraft.image_fit === modelData
+                                bordered: true; focusable: true; fontFamily: root.fontFamily; fontSize: Style.space(11)
+                                enabled: root.current.assetsSupported && (!root.acting || root.actionName === "configure")
+                                onClicked: root.editAppearance("image_fit", modelData)
+                            }
+                        }
                     }
                     Text {
                         width: parent.width
@@ -610,8 +732,8 @@ Ui.Panel {
                         background: "transparent"
                         fontFamily: root.fontFamily
                         fontSize: Style.space(12)
-                        hasCursor: root.cursor === 3 && root.current.loaded
-                        onHovered: function(isHovered) { if (isHovered) root.cursor = 3 }
+                        hasCursor: root.cursor === root.options().indexOf("reset") && root.current.loaded
+                        onHovered: function(isHovered) { if (isHovered) root.cursor = root.options().indexOf("reset") }
                         onClicked: root.act("omit")
                         }
                         Button {
@@ -644,6 +766,7 @@ Ui.Panel {
                         width: parent.width
                         visible: root.tab === "customize"
                         draft: root.appearanceDraft
+                        assetsSupported: root.current.assetsSupported
                         mode: root.current.mode
                         dirty: root.appearanceDirty
                         busy: (root.acting && root.actionName !== "configure") || !root.current.known || !root.current.loaded
@@ -653,6 +776,7 @@ Ui.Panel {
                         fontFamily: root.fontFamily
                         onEdited: function(key, value) { root.editAppearance(key, value) }
                         onEditedPatch: function(patch) { root.editAppearancePatch(patch) }
+                        onBuiltinIconPicked: function(icon) { root.pickBuiltinIcon(icon) }
                         onVariantPicked: function(variant) { root.editAppearance("variant", variant) }
                         onColorValidChanged: if (colorValid) Qt.callLater(root.flushAppearance)
                         onResetRequested: root.resetAppearance()

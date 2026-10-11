@@ -49,7 +49,8 @@ class SetupFailureTests(unittest.TestCase):
         # Actual published release manifest includes an ancestor commit pin.
         # Explicit add revision must remain nonempty so Hyprpm uses HEAD.
         (self.core / "hyprpm.toml").write_bytes((ROOT / "tests/fixtures/hyprpm-release.toml").read_bytes())
-        self.pin = {"repository": setup.REPOSITORY, "revision": "a" * 40, "version": "0.5.0"}
+        self.pin = {"repository": setup.REPOSITORY, "revision": "a" * 40, "version": "0.6.0"}
+        self.core_revisions = {str(self.core): self.pin["revision"]}
         self.args = argparse.Namespace(yes=True, plugin_only=False, hyprpm_update=False, core_source=self.core)
         self.calls = []
         self.command_options = []
@@ -58,7 +59,7 @@ class SetupFailureTests(unittest.TestCase):
         self.on_command = None
         self.reload_error = False
         self.dirty = ""
-        self.native_version = "0.5.0"
+        self.native_version = "0.6.0"
         self.admit_load = True
         self.output = io.StringIO()
         stack = contextlib.ExitStack()
@@ -92,7 +93,7 @@ class SetupFailureTests(unittest.TestCase):
             return "injected invalid configuration" if self.reload_error and ("hyprctl", "reload") in self.calls else ""
         if argv[:1] == ("git",):
             if "rev-parse" in argv:
-                return self.pin["revision"] + "\n"
+                return self.core_revisions.get(argv[2], self.pin["revision"]) + "\n"
             if "status" in argv:
                 return self.dirty
             return ""
@@ -314,6 +315,104 @@ class SetupFailureTests(unittest.TestCase):
         self.assertEqual({path: path.read_bytes() for path in paths}, before)
         self.assertTrue(self.loaded)
 
+    def test_owned_050_receipt_updates_unloaded_core_to_reviewed_060(self):
+        self.install()
+        record = self.instance.old_receipt()
+        record["version"] = "0.5.0"
+        self.instance.receipt.write_text(json.dumps(record))
+        settings = self.instance.settings.read_bytes()
+        old_revision = record["native_revision"]
+        next_source = self.home / "reviewed core 060"
+        shutil.copytree(self.core, next_source)
+        self.pin["revision"] = "b" * 40
+        self.core_revisions[str(next_source)] = self.pin["revision"]
+        self.args.core_source = next_source
+        self.loaded = False
+        self.calls.clear()
+
+        self.install()
+
+        self.assertEqual(self.manager_calls(), [("hyprpm", "remove", "hyprveil"),
+                         ("hyprpm", "add", str(next_source), self.pin["revision"]),
+                         ("hyprpm", "enable", "hyprveil")])
+        current = self.instance.old_receipt()
+        self.assertEqual(current["version"], "0.6.0")
+        self.assertEqual(current["native_revision"], self.pin["revision"])
+        self.assertEqual(current["native_source"], str(next_source))
+        self.assertNotEqual(current["native_revision"], old_revision)
+        self.assertTrue(current["native_owned"])
+        self.assertEqual(self.instance.settings.read_bytes(), settings)
+        self.assertTrue(self.loaded)
+
+    def test_owned_050_receipt_can_remove_widget_without_touching_native(self):
+        self.install()
+        record = self.instance.old_receipt()
+        record["version"] = "0.5.0"
+        self.instance.receipt.write_text(json.dumps(record))
+        self.native_version = "0.5.0"
+        paths = [self.instance.main, self.instance.bootstrap, self.instance.settings, self.instance.receipt,
+                 *(self.instance.dest / name for name in setup.HELPERS), self.core / "hyprpm.toml"]
+        before = {path: path.read_bytes() for path in paths}
+        self.calls.clear()
+
+        self.instance.uninstall()
+
+        self.assertEqual(self.calls, [("omarchy", "plugin", "remove", "io.github.objlako.hyprveil")])
+        self.assertEqual({path: path.read_bytes() for path in paths}, before)
+        self.assertTrue(self.loaded)
+
+    def test_failed_050_to_060_update_restores_old_registration_and_receipt(self):
+        self.install()
+        record = self.instance.old_receipt()
+        record["version"] = "0.5.0"
+        self.instance.receipt.write_text(json.dumps(record))
+        paths = [self.instance.main, self.instance.bootstrap, self.instance.settings, self.instance.receipt]
+        before = {path: path.read_bytes() for path in paths}
+        next_source = self.home / "reviewed core 060"
+        shutil.copytree(self.core, next_source)
+        self.pin["revision"] = "b" * 40
+        self.core_revisions[str(next_source)] = self.pin["revision"]
+        self.args.core_source = next_source
+        self.loaded = False
+        self.calls.clear()
+        fired = False
+        def fail_new_add_once(argv):
+            nonlocal fired
+            if argv[:3] == ("hyprpm", "add", str(next_source)) and not fired:
+                fired = True
+                raise subprocess.CalledProcessError(1, argv)
+        self.on_command = fail_new_add_once
+
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.install()
+
+        self.assertTrue(fired)
+        self.assertEqual({path: path.read_bytes() for path in paths}, before)
+        repository = self.instance.repositories()[0][1]
+        self.assertEqual(repository["repository"]["url"], str(self.core))
+        self.assertEqual(repository["repository"]["rev"], record["native_revision"])
+        self.assertTrue(repository["hyprveil"]["enabled"])
+        self.assertEqual(self.instance.old_receipt()["version"], "0.5.0")
+        self.assertFalse(self.loaded)
+
+    def test_unknown_receipt_versions_refuse_install_and_uninstall_before_mutation(self):
+        self.install()
+        record = self.instance.old_receipt()
+        for version in ("0.4.0", "0.6.1", "0.7.0", None, [], 0.6):
+            for action in (self.install, self.instance.uninstall):
+                with self.subTest(version=version, action=action.__name__):
+                    record["version"] = version
+                    self.instance.receipt.write_text(json.dumps(record))
+                    paths = [self.instance.main, self.instance.bootstrap, self.instance.settings, self.instance.receipt,
+                             self.instance.cache / "hyprveil/state.toml"]
+                    before = {path: path.read_bytes() for path in paths}
+                    self.calls.clear()
+                    with self.assertRaisesRegex(setup.files.Refused, "ownership record"):
+                        action()
+                    self.assertEqual({path: path.read_bytes() for path in paths}, before)
+                    self.assertFalse(self.manager_calls())
+                    self.assertFalse(any(call[:2] == ("hyprctl", "reload") or call[:1] == ("omarchy",) for call in self.calls))
+
     def test_invalid_receipt_fields_fail_as_typed_refusals(self):
         self.instance.conf.mkdir()
         for malformed in ({"schema": 1, "files": {str(self.instance.bootstrap): None}},
@@ -457,6 +556,38 @@ class SetupFailureTests(unittest.TestCase):
         self.assert_no_published_setup()
         self.assertTrue(self.loaded)
 
+    def test_loaded_050_owned_core_requires_cold_rebuild_before_060_update(self):
+        self.install()
+        record = self.instance.old_receipt()
+        record["version"] = "0.5.0"
+        self.instance.receipt.write_text(json.dumps(record))
+        self.native_version = "0.5.0"
+        paths = [self.instance.main, self.instance.bootstrap, self.instance.settings, self.instance.receipt,
+                 *(self.instance.dest / name for name in setup.HELPERS), self.instance.cache / "hyprveil/state.toml"]
+        before = {path: path.read_bytes() for path in paths}
+        self.calls.clear()
+
+        with self.assertRaisesRegex(setup.files.Refused, "0.6.0.*cold-login.*rebuild"):
+            self.install()
+
+        self.assertEqual({path: path.read_bytes() for path in paths}, before)
+        self.assertFalse(self.manager_calls())
+        self.assertFalse(any(call[:2] == ("hyprctl", "reload") or call[:3] == ("hyprctl", "plugin", "load") for call in self.calls))
+        self.assertNotIn(("controller", "reload-config"), self.calls)
+        self.assertTrue(self.loaded)
+
+    def test_matching_loaded_060_is_accepted_without_replacing_native_build(self):
+        self.install()
+        self.calls.clear()
+
+        self.install()
+
+        self.assertEqual(self.manager_calls(), [("hyprpm", "enable", "hyprveil")])
+        self.assertNotIn(("hyprpm", "remove", "hyprveil"), self.calls)
+        self.assertFalse(any(call[:3] == ("hyprctl", "plugin", "load") for call in self.calls))
+        self.assertIn(("controller", "reload-config"), self.calls)
+        self.assertEqual(self.instance.old_receipt()["version"], "0.6.0")
+
     def test_already_loaded_startup_path_still_applies_managed_settings(self):
         self.install()
         self.calls.clear()
@@ -578,6 +709,32 @@ class SetupFailureTests(unittest.TestCase):
                 setup.fcntl.flock(held, setup.fcntl.LOCK_EX | setup.fcntl.LOCK_NB)
                 self.assertEqual(setup.main(["--load-only"]), 1)
                 activate.assert_not_called()
+
+
+class ReleasePinTests(unittest.TestCase):
+    def test_only_reviewed_060_is_accepted_as_new_release_pin(self):
+        with tempfile.TemporaryDirectory(prefix="hyprveil-release-pin-") as temporary:
+            source = Path(temporary)
+            pin = {"repository": setup.REPOSITORY, "revision": "a" * 40, "version": "0.6.0"}
+            with patch.object(setup, "SOURCE", source):
+                (source / "native-release.json").write_text(json.dumps(pin))
+                self.assertEqual(setup.release(), pin)
+                for version in ("0.5.0", "0.6.1", "0.7.0", None, [], 0.6):
+                    with self.subTest(version=version):
+                        (source / "native-release.json").write_text(json.dumps(dict(pin, version=version)))
+                        with self.assertRaisesRegex(setup.files.Refused, "release pin"):
+                            setup.release()
+
+    def test_malformed_release_shape_or_revision_is_a_typed_refusal(self):
+        with tempfile.TemporaryDirectory(prefix="hyprveil-release-pin-") as temporary:
+            source = Path(temporary)
+            pin = {"repository": setup.REPOSITORY, "revision": "a" * 40, "version": "0.6.0"}
+            with patch.object(setup, "SOURCE", source):
+                for malformed in ([], None, 42, dict(pin, revision=None), dict(pin, revision=[])):
+                    with self.subTest(pin=malformed):
+                        (source / "native-release.json").write_text(json.dumps(malformed))
+                        with self.assertRaisesRegex(setup.files.Refused, "release pin"):
+                            setup.release()
 
 
 class HyprpmEnableSubprocessTests(unittest.TestCase):

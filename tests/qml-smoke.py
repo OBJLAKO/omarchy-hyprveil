@@ -215,7 +215,7 @@ ShellRoot {
                 stage = 3
             } else if (stage === 3) {
                 if (!EXPECT_FAILURE) {
-                    panel.cursor = 3
+                    panel.cursor = panel.options().indexOf("reset")
                     panel.activateCursor()
                     stage = 4
                 } else { unknownVisual=JSON.stringify(visualSnapshot(panel)); closedAt=ticks; stage=40 }
