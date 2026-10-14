@@ -156,6 +156,7 @@ python3 -m unittest discover -s tests -v
 node tests/state.test.cjs
 python3 tests/qml-process-failures.py
 python3 tests/qml-smoke.py --native-config
+python3 tests/qml-safe-input.py
 ```
 
 CI runs Python, JavaScript and executable Lua unit tests. QML and compositor
@@ -172,5 +173,7 @@ comes from a separate, stopped synthetic compositor lab. No personal desktop
 capture is used. Installer tests use temporary homes and fake manager commands;
 they do not claim a live privileged Hyprpm installation or a cold-login test.
 [Asset provenance](assets/provenance.json) · [Validation guide](docs/GUIDE.md#validation).
+
+[Clipboard isolation](docs/CLIPBOARD.md) · [Notification privacy feasibility](docs/NOTIFICATIONS.md).
 
 </details>

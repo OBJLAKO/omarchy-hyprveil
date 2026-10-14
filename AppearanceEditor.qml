@@ -40,13 +40,14 @@ Column {
     Keys.onEscapePressed: closeRequested()
     spacing: Style.space(12)
 
-    component LocalPath: TextField {
+    component LocalPath: SafeTextField {
         id: pathField
         property string savedValue: ""
         property bool shader: false
         property bool changedByUser: false
         signal committed(string path)
         maximumLength: 4096
+        language: root.language
         font.family: root.fontFamily; font.pixelSize: Style.space(11)
         foreground: changedByUser && !Appearance.validPath(text, shader) ? Color.urgent : root.foreground
         text: savedValue
@@ -164,9 +165,10 @@ Column {
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.pick() }
             }
         }
-        TextField {
+        SafeTextField {
             id: hex
             objectName: "spoilerColor"
+            language: root.language
             width: Math.max(Style.space(86), parent.width - Style.space(198))
             font.family: root.fontFamily; font.pixelSize: Style.space(11)
             text: root.draft.color; maximumLength: 7; placeholderText: "#ffffff"

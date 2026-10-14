@@ -1,0 +1,94 @@
+#!/usr/bin/python3
+"""Read a user-requested Wayland paste in a bounded, disposable process."""
+import ctypes
+import json
+import os
+import resource
+import selectors
+import signal
+import subprocess
+import time
+
+MAX_BYTES = 16384
+DEADLINE_SECONDS = 0.75
+
+
+class Refused(Exception):
+    pass
+
+
+def read_clipboard(command=None):
+    """Never run in response to clipboard changes; never return partial input."""
+    parent_pid = os.getpid()
+
+    def child_guard():
+        # If the QML owner disappears while wl-paste is blocked, the provider
+        # must not leave an orphaned reader. Also close the parent-death race.
+        if ctypes.CDLL(None).prctl(1, signal.SIGKILL, 0, 0, 0) != 0 or os.getppid() != parent_pid:
+            os._exit(1)
+        resource.setrlimit(resource.RLIMIT_AS, (128 * 1024 * 1024, 128 * 1024 * 1024))
+        resource.setrlimit(resource.RLIMIT_CPU, (1, 1))
+
+    env = {name: os.environ[name] for name in ('HOME', 'XDG_RUNTIME_DIR', 'WAYLAND_DISPLAY') if name in os.environ}
+    env.update(PATH='/usr/bin:/bin', LANG='C.UTF-8')
+    process = subprocess.Popen(command or ['/usr/bin/wl-paste', '--no-newline', '--type', 'text'],
+                               stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, env=env,
+                               start_new_session=True, preexec_fn=child_guard)
+    data = bytearray()
+    deadline = time.monotonic() + DEADLINE_SECONDS
+    try:
+        os.set_blocking(process.stdout.fileno(), False)
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdout, selectors.EVENT_READ)
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise Refused('timeout')
+                if not selector.select(remaining):
+                    raise Refused('timeout')
+                chunk = os.read(process.stdout.fileno(), min(4096, MAX_BYTES + 1 - len(data)))
+                if not chunk:
+                    selector.unregister(process.stdout)
+                else:
+                    data.extend(chunk)
+                    if len(data) > MAX_BYTES:
+                        raise Refused('too-large')
+        # Observe exit without reaping first. Keeping the group leader's PID
+        # reserved until cleanup prevents a killpg/PID-reuse race.
+        while True:
+            if time.monotonic() >= deadline:
+                raise Refused('timeout')
+            result = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG)
+            if result is not None:
+                break
+            time.sleep(0.001)
+        if result.si_code != os.CLD_EXITED or result.si_status != 0:
+            raise Refused('unavailable')
+        try:
+            text = data.decode('utf-8', errors='strict')
+        except UnicodeDecodeError:
+            raise Refused('invalid-text') from None
+        if any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in text):
+            raise Refused('single-line-only')
+        return text
+    finally:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+        process.stdout.close()
+
+
+def main():
+    try:
+        result = {'ok': True, 'text': read_clipboard()}
+    except (OSError, subprocess.SubprocessError, Refused):
+        # No provider text, paths or error details are logged to the shell.
+        result = {'ok': False}
+    print(json.dumps(result, ensure_ascii=True))
+
+
+if __name__ == '__main__':
+    main()

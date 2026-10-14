@@ -617,9 +617,10 @@ Ui.Panel {
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.pick() }
                             }
                         }
-                        TextField {
+                        SafeTextField {
                             id: maskHex
                             objectName: "maskColor"
+                            language: root.language
                             width: parent.width - Style.space(155)
                             text: root.appearanceDraft.mask_color; maximumLength: 7; placeholderText: "#000000"
                             font.family: root.fontFamily; font.pixelSize: Style.space(11)
@@ -643,9 +644,10 @@ Ui.Panel {
                         onHovered: root.cursor = 3
                         onPicked: root.act(mode)
                     }
-                    TextField {
+                    SafeTextField {
                         id: imagePath
                         objectName: "imagePath"
+                        language: root.language
                         property bool changedByUser: false
                         width: parent.width; maximumLength: 4096
                         foreground: changedByUser && !Appearance.validPath(text, false) ? Color.urgent : root.foreground

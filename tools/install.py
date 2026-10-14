@@ -12,7 +12,7 @@ PLUGIN_ID = "io.github.objlako.hyprveil"
 LEGACY_IDS = ("sky.hyprveil", "sky.screen-privacy")
 PRESET_FILES = tuple("assets/presets/" + variant + ".png" for variant in ("prism", "signal", "aurora", "contour", "radar", "matte", "error404", "matrix", "anonymous", "glass")) + ("assets/presets/provenance.json",)
 RUNTIME_FILES = ("BarWidget.qml", "Panel.qml", "StyleRow.qml", "Eye.qml", "PrivacyIcon.qml", "State.js", "I18n.js", "Privacy.js", "Appearance.js",
-                 "AppearanceEditor.qml", "SpoilerPreview.qml", "WindowPrivacy.qml", "privacy-watch", "panel-controller",
+                 "AppearanceEditor.qml", "SafeTextField.qml", "clipboard-read", "SpoilerPreview.qml", "WindowPrivacy.qml", "privacy-watch", "panel-controller",
                  "native_cli.py", "native_service.py", "native-cli-provenance.json", "install.sh", "uninstall.sh", "native-release.json", "tools/setup.py", "tools/files.py", *PRESET_FILES, "README.md", "manifest.json")
 
 def validate_runtime_parents(base, name):

@@ -1,6 +1,7 @@
 .pragma library
 // Presentation only. No strings enter commands, status parsing or privacy checks.
 var strings = {
+    "paste_refused": ["Paste unavailable, too large or timed out. Type a single-line value or copy a smaller one.", "Вставка недоступна, слишком велика или не ответила вовремя. Введите значение одной строкой или скопируйте меньше текста."],
     "native_update_notice": ["New controls need Hyprveil 0.6.0 · Update", "Новые настройки требуют Hyprveil 0.6.0 · Обновить"],
     "autosave_hint": ["Changes save automatically", "Изменения сохраняются автоматически"],
     "autosaving": ["Saving…", "Сохраняем…"],

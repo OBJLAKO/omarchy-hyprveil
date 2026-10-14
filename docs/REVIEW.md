@@ -8,6 +8,27 @@ native release admission and the public configuration/API contract. This panel
 provides explicit terminal setup and selective activation of the core's
 Hyprpm-built artifact; it contains no second capture implementation.
 
+## Panel 1.7.1: marketplace clipboard follow-up
+
+The [reported editable-field clipboard issue](https://github.com/omacom/omarchy-plugin-marketplace/issues/11068#issuecomment-6111779034)
+is addressed by the shared guarded editor and bounded explicit paste helper.
+See [the mechanism, tradeoffs and evidence](CLIPBOARD.md). Local verification
+includes 120 Python tests, 22 JS/Lua checks, 26 autosave scenarios, 11 process
+failure cases, the QML smoke case and 17 guarded-editor assertions with real Qt
+key dispatch. A native Qt 6.11.2 offscreen positive control reads provider data;
+the read-only controls make zero provider probes. Qt 6.12 itself was not run.
+CI now also checks the native guard against its packaged Qt version.
+
+Native release/provenance pins, setup and compositor configuration behavior are
+unchanged. Existing installer/privilege/package-manager capabilities and the
+manual-setup override remain. This source update requires new exact-commit
+marketplace review; older approval is not approval of these changes.
+
+[Notification privacy](NOTIFICATIONS.md) is a separate feasibility note, not a
+shipped feature or authorization to change the notification daemon. It explains
+the existing layer omission and the geometry required before individual toasts
+can have an independent replacement style without covering the monitor.
+
 ## Dependencies and installation scope
 
 The widget requires Omarchy's plugin framework, Quickshell, Python 3,
