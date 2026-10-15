@@ -28,8 +28,8 @@ import native_service as service
 import files
 
 REPOSITORY = "https://github.com/OBJLAKO/hyprveil"
-NATIVE_VERSION = "0.6.0"
-RECEIPT_VERSIONS = ("0.5.0", NATIVE_VERSION)
+NATIVE_VERSION = "0.7.0"
+RECEIPT_VERSIONS = ("0.5.0", "0.6.0", NATIVE_VERSION)
 BEGIN = "-- BEGIN OMARCHY HYPRVEIL SETUP v1"
 END = "-- END OMARCHY HYPRVEIL SETUP v1"
 BLOCK = BEGIN + '\ndofile(os.getenv("HOME") .. "/.config/hypr/hyprveil-hyprpm.lua")\n' + END

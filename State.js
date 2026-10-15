@@ -1,4 +1,5 @@
 .import "Appearance.js" as Appearance
+.import "Notifications.js" as Notifications
 .import "I18n.js" as I18n
 // Pure state parser, shared with the adversarial-input tests. Never retain
 // arbitrary status fields or future client metadata. Only the explicit local
@@ -12,7 +13,7 @@ function unknown() {
 }
 
 function parse(text) {
-    if (typeof text !== "string" || text.length > 32768) return unknown();
+    if (typeof text !== "string" || text.length > 65536) return unknown();
     try {
         var raw = JSON.parse(text);
         if (!raw || typeof raw !== "object" || Array.isArray(raw) ||
@@ -51,8 +52,15 @@ function parse(text) {
         var assetsSupported = assetFields.every(function(key) {
             return raw[key] !== undefined && s[key] !== undefined && raw[key] === s[key];
         });
+        var notifications = null;
+        if (s.notifications !== undefined) {
+            if (!s.notifications || s.notifications.api !== 1) return unknown();
+            notifications = Notifications.parse(s.notifications);
+            if (!notifications) return unknown();
+        }
         return { known: true, loaded: true, enabled: raw.enabled,
                  loadSupported: raw.load_supported !== false, persistenceSupported: raw.persistence_supported !== false, assetsSupported: assetsSupported,
+                 notifications: notifications,
                  mode: s.mode, desiredMode: raw.desired_mode,
                  spoilerFallback: s.mode === "spoiler" && ["black-fallback", "color-fallback"].indexOf(s.spoiler_status) >= 0, appearance: appearance };
     } catch (e) {

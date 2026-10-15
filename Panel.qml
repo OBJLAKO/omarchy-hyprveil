@@ -109,7 +109,8 @@ Ui.Panel {
                     appearanceSaveBlocked = true
                     appearanceError = root.tr("appearance_unconfirmed")
                 }
-            } else if ((pendingConfirmation === "start" || pendingConfirmation === "enable") && current.loaded)
+            } else if (pendingConfirmation === "notifications") message = ""
+            else if ((pendingConfirmation === "start" || pendingConfirmation === "enable") && current.loaded)
                 message = root.tr("loaded")
             else if (pendingConfirmation === "reload-config" && current.loaded)
                 message = appearanceDirty ? root.tr("lua_reloaded_dirty") : root.tr("lua_reloaded")
@@ -130,6 +131,7 @@ Ui.Panel {
             if (!Appearance.equal(appearanceDraft, merged)) appearanceDraft = merged
         }
         appearanceDirty = Object.keys(appearanceEdits).length > 0
+        if (pendingConfirmation === "notifications") notificationsEditor.confirm(current.notifications)
         pendingConfirmation = ""
         submittedFields = null
         submittedAppearance = null
@@ -140,12 +142,13 @@ Ui.Panel {
         }
         idleReady()
         Qt.callLater(flushAppearance)
+        Qt.callLater(notificationsEditor.flush)
     }
     function collectQuery(chunk) {
         if (!querying || queryOverflow || queryTimedOut) return
         // Parse raw chunks: a missing newline must not create an unbounded
         // SplitParser or StdioCollector buffer in the shell process.
-        if (queryOut.length + chunk.length > 32768) {
+        if (queryOut.length + chunk.length > 65536) {
             queryOut = ""
             queryOverflow = true
             query.signal(9)
@@ -210,7 +213,7 @@ Ui.Panel {
         flushAppearance()
     }
     function flushAppearance() {
-        if (!appearanceDirty || appearanceSaveBlocked || busy || querying || submittedFields !== null || appearanceAutosave.running) return
+        if (!appearanceDirty || appearanceSaveBlocked || notificationsEditor.saving || busy || querying || submittedFields !== null || appearanceAutosave.running) return
         if (!current.known) { refresh(false, true); return }
         if (!current.loaded) {
             appearanceSaveBlocked = true
@@ -240,7 +243,8 @@ Ui.Panel {
         editAppearancePatch({icon: icon, eye: icon !== "none"})
     }
     function setTab(next) {
-        if (["hide", "customize"].indexOf(next) < 0) return
+        if (["hide", "customize", "notifications"].indexOf(next) < 0) return
+        if (tab === "notifications") notificationsEditor.commitInputs()
         tab = next; cursor = 0; flick.contentY = 0
         if (tab === "customize") Qt.callLater(function() { editor.forceActiveFocus() })
     }
@@ -248,10 +252,10 @@ Ui.Panel {
         acting = true
         actionName = action
         pendingConfirmation = ""
-        if (action !== "configure") message = ""
+        if (action !== "configure" && action !== "notifications") message = ""
         // A query result is only a snapshot. Do not display it as proof while
         // a mode transition is in flight; a new status is required afterwards.
-        if (action !== "configure") current = State.unknown()
+        if (action !== "configure" && action !== "notifications") current = State.unknown()
         actionFinished = false
         actionTimedOut = false
         actionCode = -1
@@ -263,6 +267,8 @@ Ui.Panel {
         if (!acting || !actionFinished) return
         actionTimeout.stop()
         acting = false
+        if (actionName === "notifications" && (actionTimedOut || actionCode !== 0))
+            notificationsEditor.failed(root.tr(actionTimedOut ? "controller_timeout" : "appearance_failed"))
         if (actionName === "configure" && (actionTimedOut || actionCode !== 0)) {
             appearanceSaveBlocked = true
             appearanceError = root.tr(actionTimedOut ? "controller_timeout" : "appearance_failed")
@@ -271,9 +277,9 @@ Ui.Panel {
             : root.tr("action_unconfirmed")
         else {
             pendingConfirmation = actionName
-            if (actionName !== "configure") message = root.tr("command_checking")
+            if (actionName !== "configure" && actionName !== "notifications") message = root.tr("command_checking")
         }
-        Qt.callLater(function() { refresh(false, actionName === "configure") })
+        Qt.callLater(function() { refresh(false, actionName === "configure" || actionName === "notifications") })
     }
     function options() {
         if (!current.known) return ["refresh"]
@@ -316,6 +322,7 @@ Ui.Panel {
             // A click already authorized these edits. Closing the popout does
             // not cancel its last value or require another open to confirm it.
             editor.commitPaths()
+            notificationsEditor.commitInputs()
             imagePath.commit()
             if (!editor.colorValid) editor.syncColor()
             appearanceAutosave.stop()
@@ -406,7 +413,7 @@ Ui.Panel {
         PanelKeyCatcher {
             id: keys
             anchors.fill: parent
-            blocked: root.tab === "customize"
+            blocked: root.tab !== "hide"
             onCloseRequested: root.close()
             onTabRequested: function(direction) { root.moveCursor(direction) }
             onMoveRequested: function(dx, dy) { root.moveCursor(dy || dx) }
@@ -522,18 +529,25 @@ Ui.Panel {
                     Row {
                         width: parent.width; spacing: Style.space(6)
                         Button {
-                            width: (parent.width - parent.spacing) / 2
+                            width: (parent.width - parent.spacing * 2) / 3
                             text: root.tr("hiding"); selected: root.tab === "hide"; focusable: true
                             fontFamily: root.fontFamily; fontSize: Style.space(12)
                             onClicked: root.setTab("hide")
                         }
                         Button {
                             id: customTab
-                            width: (parent.width - parent.spacing) / 2
+                            width: (parent.width - parent.spacing * 2) / 3
                             text: root.tr("appearance") + (root.appearanceDirty ? " ·" : ""); selected: root.tab === "customize"; focusable: true
                             fontFamily: root.fontFamily; fontSize: Style.space(12)
                             hasCursor: root.cursor === root.options().indexOf("customize") && root.tab === "hide"
                             onClicked: root.setTab("customize")
+                        }
+                        Button {
+                            width: (parent.width - parent.spacing * 2) / 3
+                            text: root.tr("notifications_tab")
+                            selected: root.tab === "notifications"; focusable: true
+                            fontFamily: root.fontFamily; fontSize: Style.space(11)
+                            onClicked: root.setTab("notifications")
                         }
                     }
                     Button {
@@ -782,6 +796,18 @@ Ui.Panel {
                         onVariantPicked: function(variant) { root.editAppearance("variant", variant) }
                         onColorValidChanged: if (colorValid) Qt.callLater(root.flushAppearance)
                         onResetRequested: root.resetAppearance()
+                        onCloseRequested: root.close()
+                    }
+                    NotificationEditor {
+                        id: notificationsEditor
+                        width: parent.width
+                        visible: root.tab === "notifications"
+                        language: root.language
+                        profile: root.current.known && root.current.loaded && root.current.notifications ? root.current.notifications : null
+                        externalBusy: root.busy || root.querying || root.submittedFields !== null || root.pendingConfirmation !== ""
+                        active: root.opened && visible
+                        fontFamily: root.fontFamily
+                        onSaveRequested: function(arguments) { root.beginAction("notifications", arguments) }
                         onCloseRequested: root.close()
                     }
                     Row {

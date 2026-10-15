@@ -1,83 +1,57 @@
-# Notification privacy: supported behavior and proposed integration
+# Notification privacy
 
-This is a feasibility/design note, **not a claim that per-card notification
-styles or notification controls have shipped**. No notification settings are
-changed by the panel update that carries this note.
+Notification protection uses an independent profile. Private windows can keep
+404 while notification cards use a color, image, built-in material, or trusted
+local GLSL. Protection affects captures; local notifications remain usable.
+It is disabled by default.
 
-## What the native core already supports
+```sh
+hyprveil notifications --enabled on --mode omit
+hyprveil notifications --enabled on --mode spoiler --variant matrix --icon none
+hyprveil notifications --mode color --mask-color '#000000'
+hyprveil notifications --mode image --image-path /absolute/background.png --image-fit fill
+hyprveil notifications --mode spoiler --shader-path /absolute/local.frag
+```
 
-Native Hyprveil 0.6.0 omits a layer marked `no_screen_share` when constructing
-its protected capture scene (`src/main.cpp`, `layerHook`). That policy is
-independent of private-window appearance. Consequently, notification content
-can disappear from a supported capture while private windows keep 404, an
-image or a custom shader. The local desktop remains visible. Ordinary private
-layers are omitted; they do not inherit window replacement rectangles.
+The same fields are available through native Lua. Prefix the existing rendering
+fields with `notification_`; additionally set `notification_enabled`,
+`notification_namespace` and `notification_rounding` (-1 inherits Hyprland,
+otherwise 0–64). Updates are partial and preserve the window profile.
 
-The inspected Omarchy **4.0.4** service `omarchy.notifications` **1.0.0** uses
-the layer-shell namespace `omarchy-notifications`. Its Quickshell service owns
-the desktop notification D-Bus name. Its `Service.qml` creates one transparent,
-**full-screen** `PanelWindow` per output, with several `NotificationCard`
-children stacked at the top right. An input mask covers the toast column.
-The layer deliberately remains full-screen to avoid stale-buffer scaling when
-notifications change size. A layer's input mask is not a reliable description
-of every card's rendered pixels, rounding, image or shadow.
+```lua
+hl.plugin.hyprveil.configure({
+  notification_enabled = true,
+  notification_mode = "spoiler",
+  notification_variant = "matrix",
+  notification_eye = false,
+})
+```
 
-Omitting this transparent layer removes its notifications and exposes the
-sanitized scene behind it. It does **not** black out the monitor. Conversely,
-drawing an opaque replacement using that layer's full geometry would black out
-the monitor. That must never be used as a notification-style fallback. The
-current omission behavior must remain the safe default for unintegrated layers.
+The default exact layer-shell namespace is `omarchy-notifications`. Other
+notification daemons require their own exact namespace and a bounded input
+region. This matches a layer, not individual application names. History
+panels with a different namespace are outside this profile.
 
-## Proposed user controls
+The complete source layer, its subsurfaces and popups are excluded from the
+protected scene. Replacement envelopes come from committed input rectangles;
+source pixels outside those rectangles are excluded too. Empty, infinite,
+non-finite, overly large, or more than 32 input rectangles cause omission,
+never a full-monitor fill. An invalid image or shader uses the profile's opaque
+`mask_color`. Capture status exposes `notifications.geometry_status` and asset
+statuses for diagnosis.
 
-Expose separate **Windows** and **Notifications** sections in the Omarchy panel,
-backed by separate typed settings/status in the native Hyprpm core. Keep window
-settings independent. The notification section should initially offer normal
-capture or omission for an exact configured notification namespace. Later,
-integrated per-card surfaces can offer Color, Spoiler/404, Image with its fit
-mode, custom procedural GLSL and icon settings, with their own profile.
+Card geometry depends on the notification daemon's input mask. Omarchy's
+current built-in manager exposes the toast column, so its narrow inter-card
+gaps are included in the replacement. A manager exposing individual card
+regions gets individual replacements and untouched gaps. No new notification
+daemon is required, and the plugin never reads notification text or history.
 
-In a standalone Hyprpm installation, the same profile must be configurable
-through Lua without the Omarchy widget. Existing `no_screen_share` layer rules
-must retain their current omission semantics. Never target every Quickshell
-surface by process ID: the bar, launcher, menus and notification service share
-a process. Namespace matching must be exact and opt-in for unfamiliar managers.
+Image sizing supports fill, fit, tile and stretch. Shader/icon assets use the
+same bounded admission as window assets. Shaders are trusted local programs:
+arbitrarily expensive GLSL can stall the GPU. Stop sharing before unloading or
+upgrading the native module; protection requires the module to remain loaded.
 
-## Geometry needed for individual replacement cards
-
-The compositor sees Wayland surfaces, not QML `NotificationCard` objects or
-notification sender names. It cannot infer individual card boundaries safely
-from a full-screen transparent layer. There are two possible integrations:
-
-1. **Prefer separate bounded layer surfaces for each toast**, retaining the
-   stable-buffer behavior in each card's envelope. Each has a known small
-   geometry and an explicit privacy/style capability. Native code can omit its
-   original surface and draw a synthetic replacement at its real stack position.
-2. A cooperative, versioned geometry protocol from a trusted notification
-   manager can publish card bounds tied to a particular surface, output and
-   committed buffer generation. Geometry must be atomic with content updates;
-   an ordinary periodic JSON/IPC list can race a new toast and leak its first
-   frame. This approach requires more protocol and lifecycle work than option 1.
-
-Do not derive card bounds by sampling private pixels, applying a desktop-wide
-shader, guessing a fixed top-right rectangle or using an input region as a
-pixel mask. If the integration, generation, geometry or asset fails, omit the
-notification layer/card. Do not cover the monitor with a synthetic fill. Card
-shader errors may fall back to the selected opaque color only when the card's
-bounded geometry is established.
-
-Per-application notification filtering also requires manager cooperation:
-several senders share the same Wayland surface. An app-name hint is a user
-filter, not authenticated sender identity. The notification center/history is
-a separate surface/interaction and must have an explicit policy of its own.
-
-## Required validation before shipping
-
-Use synthetic notifications in an isolated compositor. Check zero private
-pixels in supported monitor, region and window exports; unaffected pixels
-outside each card; simultaneous 404 windows; multiple toasts and outputs;
-scale/zoom, rounding and shadows; arrival, replacement, expiry and close;
-fullscreen stacking; late geometry; manager restart/disconnect; and invalid
-images/shaders. An unknown manager must remain on omission and report that
-per-card styling is unavailable. Do not claim compatibility with every manager
-or capture backend before those tests pass.
+In the Omarchy panel, open **Notifications**. Enable protection and select its
+replacement independently from window appearance. Changes save automatically;
+a failed or unconfirmed update remains marked for retry. No additional daemon
+is installed.

@@ -1,6 +1,15 @@
 .pragma library
 // Presentation only. No strings enter commands, status parsing or privacy checks.
 var strings = {
+    "notification_hint": ["Protect notifications in recordings and streams. Windows keep their own style.", "Скрывайте уведомления в записях и трансляциях. У окон остаётся свой стиль."],
+    "notification_core_required": ["Update the native Hyprveil core to use notification protection.", "Обновите нативное ядро Hyprveil для защиты уведомлений."],
+    "notification_enabled": ["Notification protection on", "Защита уведомлений включена"],
+    "notification_disabled": ["Notification protection off", "Защита уведомлений выключена"],
+    "notification_saving": ["Saving…", "Сохранение…"],
+    "notification_retry": ["Retry", "Повторить"],
+    "notification_unconfirmed": ["Changes are unconfirmed. Retry.", "Изменения не подтверждены. Повторите."],
+
+    "notifications_tab": ["Notifications", "Уведомления"],
     "paste_refused": ["Paste unavailable, too large or timed out. Type a single-line value or copy a smaller one.", "Вставка недоступна, слишком велика или не ответила вовремя. Введите значение одной строкой или скопируйте меньше текста."],
     "native_update_notice": ["New controls need Hyprveil 0.6.0 · Update", "Новые настройки требуют Hyprveil 0.6.0 · Обновить"],
     "autosave_hint": ["Changes save automatically", "Изменения сохраняются автоматически"],

@@ -12,6 +12,7 @@ import QtTest
 import Quickshell
 import "./plugin" as Plugin
 ShellRoot {
+    property bool inTick: false
     property int stage: 0
     property int ticks: 0
     property int edits: 0
@@ -19,6 +20,7 @@ ShellRoot {
     function expect(condition, reason) { checks++; if (!condition) throw new Error(reason) }
     function key(value, code, modifiers) { field.handleKey({text:value, key:code || 0, modifiers:modifiers || 0, accepted:false}) }
     Window {
+        id: editWindow
         visible: true; width: 500; height: 200
         Plugin.SafeTextField { id: field; width: 460; maximumLength: 64
             onTextEdited: edits++ }
@@ -28,11 +30,19 @@ ShellRoot {
     Timer {
         running: true; repeat: true; interval: 20
         onTriggered: {
+            // QtTest keyClick runs a nested event loop. Do not re-enter this
+            // timer while the current simulated key is still being delivered.
+            if (inTick) return
+            inTick = true
             ticks++
             try {
                 if (stage === 0) {
+                    editWindow.requestActivate()
                     field.forceActiveFocus()
-                    if (!field.activeFocus) return
+                    if (!field.activeFocus) {
+                        if (ticks > 200) { console.error("HYPRVEIL_SAFE_INPUT_FAILED window focus timeout"); Qt.callLater(Qt.quit) }
+                        return
+                    }
                     expect(field.readOnly && !field.canPaste, "underlying field can read native clipboard")
                     keyDriver.keyClick(Qt.Key_A)
                     expect(field.text === "a", "actual Qt key dispatch did not edit")
@@ -80,10 +90,11 @@ ShellRoot {
                     expect(field.text === "external", "undo restored stale native settings")
                     expect(field.readOnly && !field.canPaste, "edit path made native editor writable")
                     console.log("HYPRVEIL_SAFE_INPUT_OK " + JSON.stringify({checks:checks, edits:edits}))
-                    Qt.quit()
+                    Qt.callLater(Qt.quit)
                 }
-            } catch (error) { console.error("HYPRVEIL_SAFE_INPUT_FAILED " + error); Qt.quit() }
-            if (ticks > 200) { console.error("HYPRVEIL_SAFE_INPUT_FAILED timeout"); Qt.quit() }
+            } catch (error) { console.error("HYPRVEIL_SAFE_INPUT_FAILED " + error); Qt.callLater(Qt.quit) }
+            finally { inTick = false }
+            if (ticks > 200) { console.error("HYPRVEIL_SAFE_INPUT_FAILED timeout"); Qt.callLater(Qt.quit) }
         }
     }
 }
@@ -100,7 +111,12 @@ with tempfile.TemporaryDirectory(prefix='hyprveil-safe-input-') as temporary:
     runtime=root/'runtime';runtime.mkdir(mode=0o700)
     env=dict(os.environ,HOME=str(root),XDG_RUNTIME_DIR=str(runtime),QT_QPA_PLATFORM='offscreen',QT_QUICK_BACKEND='software',QT_QPA_PLATFORMTHEME='',QT_STYLE_OVERRIDE='Fusion')
     for name in ('WAYLAND_DISPLAY','DISPLAY','HYPRLAND_INSTANCE_SIGNATURE','DBUS_SESSION_BUS_ADDRESS'): env.pop(name,None)
-    result=subprocess.run(['/usr/bin/quickshell','--no-color','--path',str(root)],env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=10)
+    try:
+        result=subprocess.run(['/usr/bin/quickshell','--no-color','--path',str(root)],env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=10)
+    except subprocess.TimeoutExpired as error:
+        output=error.stdout or b''
+        print(output.decode(errors='replace') if isinstance(output,bytes) else output)
+        raise
     report={'ok':result.returncode==0 and 'HYPRVEIL_SAFE_INPUT_OK ' in result.stdout and not any(word in result.stdout for word in ('HYPRVEIL_SAFE_INPUT_FAILED','TypeError','ReferenceError','Cannot assign','Unable to assign')),'output':result.stdout}
     (ROOT/'artifacts').mkdir(exist_ok=True)
     (ROOT/'artifacts/clipboard-qml-input.json').write_text(json.dumps(report,indent=2)+'\n')

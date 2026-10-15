@@ -202,3 +202,31 @@ were checked on 2026-10-09. Hyprveil is already listed; a newer release uses
 with fresh maintainer review. The existing snapshot remains in place while
 that request is pending. Stock Omarchy install/update commands follow mutable
 upstream HEAD; they are not bound to a marketplace verification snapshot.
+
+## Combined notification and clipboard update — 1.8.0 / native 0.7.0
+
+Native source is pinned to `90bc06bad463fb71a1a92a8c9c3602063ddfc35a`;
+Hyprpm's Hyprland 0.56.2 build pin selects source commit
+`c834c06`. Notification settings are typed, independent partial updates. The
+source layer and popups never enter the protected scene; replacement rectangles
+are bounded input envelopes. Invalid, infinite or fullscreen input geometry
+omits the layer. Asset failures use the independent opaque fill.
+
+Local validation: 231 native Python tests, eight standalone C++ suites, the new
+notification configuration suite under ASan/UBSan, and 15 synthetic GPU checks.
+The GPU fixture includes private pixels outside its advertised input mask,
+separate 404 windows, animated Matrix cards, malformed GLSL, and a deliberately
+fullscreen input mask. All source pixels remained absent from protected frames.
+No personal notifications or additional notification daemon were used.
+
+Panel validation: 121 Python tests, 23 JavaScript/Lua checks, 26 QML autosave
+scenarios, 11 process-failure scenarios, independent notification draft and
+real-panel/delayed-process tests, native-config QML smoke, and 17 guarded input
+assertions. The guarded-input fixture prevents timer re-entry while QtTest
+key delivery runs a nested event loop and defers its own shutdown.
+
+The built-in Omarchy notification manager still advertises one toast-column
+input rectangle. Consequently its inter-card gaps are included in styled
+replacements; this is documented rather than presented as exact card geometry.
+No system notification-service files are patched. Native setup remains an
+explicit, pinned build; `manual-setup` marketplace handling remains required.

@@ -35,7 +35,7 @@ You can star the
 ## Install
 
 Requires an Omarchy shell with third-party bar plugins, Python 3, `hyprpm`
-and `hyprctl`. Setup installs **native Hyprveil 0.6.0**, which currently supports
+and `hyprctl`. Setup installs **native Hyprveil 0.7.0**, which currently supports
 **Hyprland 0.56.2 with its reviewed dependency ABI**. Other ABIs are refused.
 
 Add the widget:
@@ -177,3 +177,14 @@ they do not claim a live privileged Hyprpm installation or a cold-login test.
 [Clipboard isolation](docs/CLIPBOARD.md) · [Notification privacy feasibility](docs/NOTIFICATIONS.md).
 
 </details>
+
+### Notifications
+
+Open **Notifications** to protect toasts independently from private windows.
+For example, keep windows in **404** and hide notifications, or use a separate
+color, image or animated material. Changes save automatically. No additional
+notification daemon is installed.
+
+Protection follows the notification layer's bounded input region and never
+fills the whole monitor. Omarchy currently supplies the toast column, including
+its narrow gaps. See [notification settings and limits](docs/NOTIFICATIONS.md).

@@ -153,7 +153,7 @@ ShellRoot {
                 if (queryProcess.running) throw new Error("query failure released a live child")
                 if (panel.current.known) throw new Error("bad query accepted")
                 if (SCENARIO === "query-timeout" && panel.message !== panel.tr("query_timeout")) throw new Error("query timeout lost")
-                if (panel.queryOut.length>32768) throw new Error("unbounded query retained")
+                if (panel.queryOut.length>65536) throw new Error("unbounded query retained")
                 stage=3
             }
             if (stage===3) { console.log("HYPRVEIL_PROCESS_FAILURE_OK"); Qt.quit() }

@@ -7,7 +7,9 @@ const appearance = vm.createContext({});
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'Appearance.js'), 'utf8'), appearance);
 const i18n = vm.createContext({});
 vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "I18n.js"), "utf8").replace(/^\.pragma[^\n]*\n/, ""), i18n);
-const model = vm.createContext({Appearance: appearance, I18n: i18n});
+const notifications = vm.createContext({Appearance: appearance});
+vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'Notifications.js'), 'utf8').replace(/^\.import[^\n]*\n/gm, ''), notifications);
+const model = vm.createContext({Appearance: appearance, Notifications: notifications, I18n: i18n});
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'State.js'), 'utf8').replace(/^\.import[^\n]*\n/gm, ''), model);
 const parse = value => JSON.parse(JSON.stringify(model.parse(typeof value === 'string' ? value : JSON.stringify(value))));
 const defaults = () => JSON.parse(JSON.stringify(appearance.defaults()));
@@ -381,7 +383,7 @@ test('English is the fallback and Russian locales select complete presentation t
     assert.equal(model.label('__proto__', false), 'State unconfirmed');
 });
 test('localization is complete and leaves native parsing and command data untouched', () => {
-    for (const file of ['Panel.qml', 'BarWidget.qml', 'WindowPrivacy.qml', 'AppearanceEditor.qml']) {
+    for (const file of ['Panel.qml', 'BarWidget.qml', 'WindowPrivacy.qml', 'AppearanceEditor.qml', 'NotificationEditor.qml']) {
         const qml = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
         assert.equal(/[А-Яа-яЁё]/u.test(qml), false, file);
         for (const match of qml.matchAll(/\.tr\("([a-z_]+)"\)/g)) assert.equal(Object.hasOwn(i18n.strings, match[1]), true, match[1]);
@@ -396,3 +398,22 @@ test('localization is complete and leaves native parsing and command data untouc
     }
 });
 console.log('passed 2 locale completeness and presentation-only tests');
+test('notification profile is independent, strict and emits partial commands', () => {
+    const value=JSON.parse(JSON.stringify(notifications.defaults()));
+    value.variant='matrix'; value.enabled=true;
+    const parsed=JSON.parse(JSON.stringify(notifications.parse(value)));
+    assert.equal(parsed.rounding,-1);
+    assert.deepEqual(JSON.parse(JSON.stringify(notifications.command(parsed,['enabled','variant']))),
+        ['notifications','--variant','matrix','--enabled','on']);
+    assert.equal(notifications.update(value,{rounding:true}),null);
+    assert.equal(notifications.update(value,{namespace:'.*'}),null);
+    assert.equal(notifications.command(value,['enabled','enabled']).length,0);
+    const raw=sample('spoiler'); raw.appearance.variant='error404'; raw.status.appearance.variant='error404';
+    raw.status.notifications={api:1,...value,private_payload:'must disappear'};
+    const result=parse(raw);
+    assert.equal(result.appearance.variant,'error404');
+    assert.equal(result.notifications.variant,'matrix');
+    assert.equal(result.notifications.private_payload,undefined);
+    raw.status.notifications.enabled=1;
+    assert.equal(parse(raw).known,false);
+});
